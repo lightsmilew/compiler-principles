@@ -1,0 +1,9 @@
+{
+  "label": "实验内容",
+  "position": 3,
+  "link": {
+    "type": "generated-index",
+    "title": "实验内容",
+    "description": "七个循序渐进的实验，最终拼装出一个可运行的编译器前端与后端。"
+  }
+}

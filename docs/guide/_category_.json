@@ -1,0 +1,9 @@
+{
+  "label": "实验指南",
+  "position": 2,
+  "link": {
+    "type": "generated-index",
+    "title": "实验指南",
+    "description": "开始动手之前，先准备好环境、了解实验流程与报告规范。"
+  }
+}

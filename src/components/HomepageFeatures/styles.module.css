@@ -1,0 +1,79 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  height: 100%;
+  padding: 1.5rem;
+  background-color: var(--cc-bg-surface);
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius-xl);
+  box-shadow: var(--cc-shadow-sm);
+  transition: transform var(--cc-duration) var(--cc-ease),
+    box-shadow var(--cc-duration) var(--cc-ease),
+    border-color var(--cc-duration) var(--cc-ease);
+}
+
+.card:hover {
+  transform: translateY(var(--cc-lift));
+  box-shadow: var(--cc-shadow-md);
+  border-color: var(--cc-blue-200);
+}
+
+[data-theme='dark'] .card:hover {
+  border-color: var(--cc-blue-700);
+}
+
+/* 图标容器：hover 时底色转为品牌蓝、图标转白并放大（group + hover:scale-110） */
+.iconBox {
+  flex: none;
+  width: 2.75rem;
+  height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--cc-radius);
+  background-color: var(--cc-accent-soft);
+  color: var(--cc-accent-soft-fg);
+  transition: background-color var(--cc-duration) var(--cc-ease),
+    color var(--cc-duration) var(--cc-ease),
+    transform var(--cc-duration) var(--cc-ease);
+}
+
+.card:hover .iconBox {
+  background-color: var(--cc-accent);
+  color: var(--cc-accent-on);
+  transform: scale(1.1);
+}
+
+.title {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--cc-text-strong);
+  margin: 0;
+}
+
+.description {
+  font-size: 0.9375rem;
+  line-height: 1.75;
+  color: var(--cc-text-muted);
+  margin: 0;
+}
+
+@media (max-width: 996px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 640px) and (max-width: 996px) {
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
