@@ -153,11 +153,11 @@ struct BasicBlock {
 对每个用例，分别用未优化和优化后的程序运行，比对输出：
 
 ```bash
-./compiler --dump-ir input.mc > before.quad
-./compiler --dump-ir --opt input.mc > after.quad
+./compiler --dump-ir < input.mc > before.ll
+./compiler --dump-ir --opt < input.mc > after.ll
 diff before.quad after.quad          # 期望：内容变化
-./run before.quad > out1.txt
-./run after.quad  > out2.txt
+./run before.ll > out1.txt
+./run after.ll  > out2.txt
 diff out1.txt out2.txt               # 期望：完全一致
 ```
 

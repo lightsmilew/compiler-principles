@@ -62,7 +62,7 @@ FOLLOW(A):
 
 ### 基本要求
 
-1. 读入 [MiniC 文法](../reference/grammar.md) 中 `Expr` 及其下所有产生式；
+1. 读入 [ToyC 文法](../reference/grammar.md) 中 `Expr` 及其下所有产生式；
 2. 消除左递归并输出改写后的文法；
 3. 计算并输出每个非终结符的 FIRST 与 FOLLOW 集；
 4. 构造预测分析表，检测并报告冲突单元格；

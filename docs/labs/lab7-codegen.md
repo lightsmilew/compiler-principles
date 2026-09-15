@@ -23,14 +23,14 @@ flowchart LR
   IR["四元式<br/>(+, a, b, t0)"] --> IS[指令选择]
   IS --> RA[寄存器分配]
   RA --> FR[栈帧布局]
-  FR --> ASM["汇编代码<br/>lw / add / sw"]
+  FR --> ASM["RISC-V64GC 汇编代码<br/>ld / add / sd"]
   ASM --> PE[窥孔优化]
   PE --> OUT[最终目标代码]
 ```
 
 ### 栈帧布局
 
-以 MIPS 为例，函数调用时的栈帧自高地址向低地址生长：
+以 RISC-V64GC 为例，函数调用时的栈帧自高地址向低地址生长：
 
 ```mermaid
 flowchart TB
@@ -61,14 +61,16 @@ flowchart TD
 
 ### 基本要求
 
-1. 从 MIPS32 与 x86-64 中**任选一种**目标架构并固定，不得中途更换；
+1. 目标架构固定为 **RISC-V64GC**，不得生成 RISC-V32、MIPS32 或 x86-64 代码；
 2. 实现覆盖全部四元式算子的指令选择；
 3. 实现寄存器分配：
    - 至少实现**线性扫描**；鼓励实现**图着色 + 溢出**；
    - 必须正确处理"活跃区间重叠"导致的冲突；
 4. 实现栈帧布局，明确 `SP`/`FP` 的维护约定；
 5. 遵守目标架构的调用约定（参数传递、返回值、被调用者保存寄存器）；
-6. 生成的汇编可直接交给 `spim` 或 `gcc`/`as` 汇编执行。
+6. 生成的汇编可直接交给支持 RV64GC 的 Linux 交叉工具链汇编和链接执行；
+7. 对 ToyC 运行时库中的 `getint()` 与 `putint(int)` 生成外部函数调用，
+  并通过静态链接加入 `libtoyc.a`。
 
 ### 进阶要求
 
@@ -84,21 +86,13 @@ flowchart TD
 (=, t0, _, c)
 ```
 
-生成的 MIPS32 汇编：
+生成的 RISC-V64GC 汇编（示意）：
 
 ```asm
-lw    $t0, a
-lw    $t1, b
-add   $t2, $t0, $t1
-sw    $t2, c
-```
-
-对应的 x86-64（AT&T 语法）汇编：
-
-```asm
-movl  a(%rip), %eax
-addl  b(%rip), %eax
-movl  %eax, c(%rip)
+ld    t0, 0(a0)
+ld    t1, 0(a1)
+add   t2, t0, t1
+sd    t2, 0(a2)
 ```
 
 ## 五、关键算法：线性扫描寄存器分配
@@ -118,7 +112,7 @@ movl  %eax, c(%rip)
 ```
 
 :::warning 溢出与调用约定
-被调用者保存寄存器（MIPS 的 `$s0-$s7`）如果在函数内被使用，必须
+被调用者保存寄存器（RISC-V 的 `s0-s11`）如果在函数内被使用，必须
 在序言中压栈、在尾声恢复，否则调用者的值会被破坏。这是最常见的错误来源。
 :::
 
@@ -136,8 +130,9 @@ movl  %eax, c(%rip)
 ### 正确性验证流程
 
 ```bash
-./compiler --dump-asm input.mc > out.s
-spim -file out.s          # MIPS：直接在模拟器上运行
+./compiler --dump-asm < input.mc > out.s
+riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
+  -nostdlib -static out.s libtoyc.a -o out.elf
 echo "exit code: $?"      # 与解释执行四元式的期望结果比对
 ```
 

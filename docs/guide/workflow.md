@@ -72,18 +72,23 @@ error: line 12, column 5: unexpected character '@'
 
 ### 可测试性
 
-程序的每个阶段都应提供独立的 dump 开关，例如：
+统一驱动使用原实验约定的 `--dump-*` 开关，并从标准输入读取 ToyC 源程序、向标准输出写入阶段结果：
 
 ```bash
-./mycompiler --dump-tokens  input.mc   # 实验一
-./mycompiler --dump-ast     input.mc   # 实验二、三
-./mycompiler --dump-ir      input.mc   # 实验五
-./mycompiler --dump-asm     input.mc   # 实验七
+./mycompiler --dump-tokens < input.tc                 # 词法检查
+./mycompiler --dump-ast < input.tc                    # 语法/AST 检查
+./mycompiler --dump-symtab < input.tc                 # 选做语义分析
+./mycompiler --dump-ir < input.tc                     # LLVM IR
+./mycompiler --dump-ir --opt < input.tc               # 优化后的 LLVM IR
+./mycompiler --dump-asm < input.tc > output.s         # RV64GC 汇编
+./mycompiler --dump-asm -opt < input.tc > optimized.s # 优化后 RV64GC 汇编
 ```
 
-这样助教可以在不阅读源码的情况下验证每个阶段的正确性。
+`--dump-*` 模式用于检查中间结果；最终评测重点是 `--dump-asm` 产生的 RV64GC 汇编及其运行结果。
 
 ## 四、验收方式
+
+提交前请阅读[希冀提交与评测](./submission.md)，完成干净目录 clone、构建、RV64GC 汇编链接和 QEMU 运行检查。
 
 - **自动测试**：助教用统一的测试集运行你的编译器，比对输出；
 - **现场答辩**：随机抽取一段代码，要求你口述其在本阶段被如何处理；

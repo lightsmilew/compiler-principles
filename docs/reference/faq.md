@@ -112,8 +112,9 @@ flowchart TD
 
 ### Q：生成的汇编在本机跑不了？
 
-请确认你选择的目标架构与模拟器一致（MIPS 用 SPIM，x86-64 用 gcc 汇编）。
-两套架构的调用约定不同，不要混用。
+请确认使用的是统一规定的 RISC-V64GC 工具链，并指定 `-march=rv64gc` 与
+`-mabi=lp64d`。最终链接时还要加入 ToyC 运行时静态库 `libtoyc.a`，
+否则 `getint` 或 `putint` 等外部符号会解析失败。
 
 ## 环境与提交
 

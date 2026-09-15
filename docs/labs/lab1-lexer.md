@@ -2,7 +2,7 @@
 sidebar_position: 1
 sidebar_label: 实验一 · 词法分析器
 title: 实验一 · 词法分析器
-description: 实现 MiniC 的词法分析器，输出规范化的 Token 流
+description: 实现 ToyC 的词法分析器，输出规范化的 Token 流
 ---
 
 # 实验一 · 词法分析器
@@ -41,11 +41,6 @@ stateDiagram-v2
   IntDec --> IntDec: digit
   Start --> IntOct: "0"
   IntOct --> IntOct: "0-7"
-  Start --> Float: digit
-  Float --> Float: digit
-  Float --> Frac: "."
-  Frac --> FloatEnd: digit
-  FloatEnd --> FloatEnd: digit
   Start --> Slash: "/"
   Slash --> LineComment: "/"
   Slash --> BlockComment: "*"
@@ -63,29 +58,28 @@ stateDiagram-v2
 
 ### 基本要求
 
-1. 支持 [MiniC 词法约定](../reference/grammar.md) 中的**全部**记号类别；
-2. 支持十进制、八进制、十六进制整数与科学计数法浮点数；
+1. 支持 [ToyC 词法约定](../reference/grammar.md) 中的**全部**记号类别；
+2. 支持 ToyC 规定的十进制整数；
 3. 正确处理单行注释与块注释（块注释不可嵌套）；
 4. 每个 Token 记录**行号与列号**（均从 1 开始）；
 5. 输出格式遵循 `<类别, 行号, 列号, "字面量">`。
 
 ### 进阶要求
 
-6. 输出同时保留原始字面量与规范化语义值，例如 `0x1A` 的语义值为 `26`；
-7. 关键字与标识符共用一张表，通过哈希查表区分，而不是写 15 个 `if`。
+6. 输出同时保留原始字面量与规范化语义值；
+7. 关键字与标识符共用一张表，通过哈希查表区分。
 
 ## 四、数据结构设计
 
 ```cpp
 enum class TokenType {
-  KwInt, KwFloat, KwVoid, KwIf, KwElse, KwWhile, KwFor,
-  KwBreak, KwContinue, KwReturn, KwConst, KwStruct,
-  KwSizeof, KwPrintf,
-  Identifier, IntLit, FloatLit, StringLit, CharLit,
+  KwInt, KwVoid, KwIf, KwElse, KwWhile,
+  KwBreak, KwContinue, KwReturn,
+  Identifier, Number,
   Plus, Minus, Star, Slash, Percent,
   Assign, Eq, Ne, Lt, Le, Gt, Ge, And, Or, Not,
-  LParen, RParen, LBracket, RBracket, LBrace, RBrace,
-  Semicolon, Comma, Dot, Arrow, Eof, Error
+  LParen, RParen, LBrace, RBrace, Semicolon, Comma,
+  Eof, Error
 };
 
 struct Token {
@@ -106,9 +100,8 @@ scan_token():
 
     if end of input:                 return Token(Eof)
     if isalpha(c) or c == '_':       return scan_identifier_or_keyword()
-    if isdigit(c):                   return scan_number()
-    if c == '"':                     return scan_string()
-    if c == '\'':                    return scan_char()
+    if isdigit(c) or (c == '-' and isdigit(peek_next())):
+                      return scan_number()
 
     for op in operators_by_length_desc:   # 先试长运算符
         if match(op):                return Token(op)
@@ -118,7 +111,7 @@ scan_token():
     return Token(Error)
 ```
 
-- `scan_number()` 需按 `0x` → 八进制 → 浮点 → 十进制的顺序判断；
+- `scan_number()` 按 ToyC 的十进制整数规则识别 `NUMBER`；
 - 遇到非法后缀（如 `123abc`）应报错并**继续扫描**，以便一次报告多个错误。
 
 ## 六、测试用例
@@ -128,19 +121,17 @@ scan_token():
 | 文件名 | 覆盖点 |
 | --- | --- |
 | `basic.mc` | 关键字、标识符、基本运算 |
-| `numbers.mc` | 十/八/十六进制、浮点、科学计数法 |
+| `numbers.mc` | 十进制整数 |
 | `comments.mc` | 单行注释、块注释、注释中的记号 |
-| `strings.mc` | 转义序列 `\n` `\t` `\\` `\"` |
 | `longest.mc` | `a+++b`、`--x` 等最长匹配边界 |
-| `errors.mc` | 未闭合字符串、非法字符、未闭合注释 |
+| `errors.mc` | 非法字符、未闭合注释 |
 
 ### 输入与期望输出示例
 
 输入 `numbers.mc`：
 
 ```c
-int x = 0x1A;
-float y = 1.0e-5;
+int x = 42;
 ```
 
 期望输出：
@@ -149,10 +140,8 @@ float y = 1.0e-5;
 <INT, 1, 1, "int">
 <ID, 1, 5, "x">
 <ASSIGN, 1, 7, "=">
-<INT_LIT, 1, 9, "0x1A">
-<SEMI, 1, 13, ";">
-<FLOAT, 2, 1, "float">
-<ID, 2, 7, "y">
+<NUMBER, 1, 9, "42">
+<SEMI, 1, 11, ";">
 <ASSIGN, 2, 9, "=">
 <FLOAT_LIT, 2, 11, "1.0e-5">
 <SEMI, 2, 17, ";">

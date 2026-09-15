@@ -1,6 +1,6 @@
 # 编译原理实验 · 文档站
 
-以 **MiniC 编译器**为主线的编译原理实验文档站。站点由 [Docusaurus](https://docusaurus.io/)（React）构建，
+以 **ToyC 编译器**为主线的编译原理实验文档站。站点由 [Docusaurus](https://docusaurus.io/)（React）构建，
 所有内容都来自仓库内的 Markdown 文件，并自动部署到 GitHub Pages。
 
 - 线上地址：`https://<your-github-username>.github.io/CompilerSystemPractice/`
