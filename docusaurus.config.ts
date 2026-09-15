@@ -11,15 +11,14 @@ import type * as Preset from '@docusaurus/preset-classic';
  * 本地构建或首次部署前，请把下面的兜底值改成你自己的 GitHub 用户名与仓库名。
  * （也可以用环境变量 GITHUB_REPOSITORY_OWNER / GITHUB_REPOSITORY 覆盖）
  */
-const organizationName = 
-  process.env.GITHUB_REPOSITORY_OWNER ?? 'lightsmilew';
-const projectName =
-  process.env.GITHUB_REPOSITORY?.split('/')[1] ?? 'compiler-principles';
+// 已硬编码为 https://lightsmilew.github.io/compiler-principles/
+const organizationName = 'lightsmilew';
+const projectName = 'compiler-principles';
 
 const config: Config = {
   title: '编译原理实验',
   tagline: '从词法分析到目标代码生成的完整实践',
-  favicon: 'img/favicon.ico',
+  favicon: 'img/icon.ico',
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
   future: {
@@ -27,8 +26,10 @@ const config: Config = {
   },
 
   // 线上站点地址：https://<用户名>.github.io/<仓库名>/
-  url: `https://${organizationName}.github.io`,
-  baseUrl: `/${projectName}/`,
+  url: `https://lightsmilew.github.io`,
+  baseUrl: `/compiler-principles/`,
+  // 注意：url 和 baseUrl 已硬编码为实际部署地址
+  // 如果改用 GitHub Actions CI，请将上面的常量恢复为 env 读取
 
   // GitHub Pages 部署配置
   organizationName,
@@ -57,6 +58,10 @@ const config: Config = {
           sidebarPath: './sidebars.ts',
           // 文档页面右下角的 "编辑此页" 链接
           editUrl: `https://github.com/${organizationName}/${projectName}/tree/main/`,
+          // 启用 :::tip :::info :::danger :::caution 等提示块
+          admonitions: {
+            keywords: ['tip', 'info', 'note', 'success', 'warning', 'danger', 'caution'],
+          },
         },
         // 本项目是实验文档站，不需要博客
         blog: false,
@@ -76,14 +81,24 @@ const config: Config = {
       theme: {light: 'neutral', dark: 'dark'},
       options: {
         fontFamily: 'var(--ifm-font-family-base)',
-        flowchart: {curve: 'basis', useMaxWidth: true},
+        flowchart: {curve: 'basis', useMaxWidth: true, htmlLabels: true},
+        themeVariables: {
+          // 珞珈绿主题（与全站品牌色保持一致）
+          primaryColor: '#0e4834',
+          primaryTextColor: '#ffffff',
+          primaryBorderColor: '#08291d',
+          lineColor: '#115740',
+          secondaryColor: '#e6efeb',
+          tertiaryColor: '#f8fafc',
+          fontSize: '14px',
+        },
       },
     },
     navbar: {
       title: '编译原理实验',
       logo: {
         alt: '编译原理实验',
-        src: 'img/logo.svg',
+        src: 'img/title.png',
       },
       items: [
         {
@@ -107,11 +122,11 @@ const config: Config = {
           items: [
             {
               label: '课程总览',
-              to: '/docs/intro',
+              to: '/docs/labs/capstone',
             },
             {
-              label: '实验一：词法分析',
-              to: '/docs/labs/lab1-lexer',
+              label: '第一部分：词法分析',
+              to: '/docs/labs/part1-lexer',
             },
           ],
         },

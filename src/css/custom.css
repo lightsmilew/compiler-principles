@@ -1,92 +1,103 @@
 /* ==========================================================================
-   Corporate Clean（企业简洁风）主题
+   武汉大学（武大）主题
    --------------------------------------------------------------------------
-   本文件把 Corporate Clean 的 Tailwind token 映射到 Docusaurus 的 Infima
-   变量体系，使整站（文档页 / 首页 / 导航 / 页脚）保持同一套视觉语言。
-
-   Token 映射对照：
-     rounded-lg / rounded-xl      → --ifm-global-radius / --cc-radius-xl
-     shadow-sm / shadow / shadow-md → --ifm-global-shadow-lw / -md / -tl
-     blue-600 / blue-700          → --ifm-color-primary / -dark
-     slate-50 / white             → --cc-bg-page / --cc-bg-surface
-     gray-200 / gray-300          → --cc-border / --cc-border-strong
-     duration-150 / duration-200  → --cc-duration-fast / --cc-duration
-     hover:-translate-y-0.5       → --cc-lift
-     active:scale-[0.98]          → --cc-press
-     focus:ring-2 ring-offset-2   → :focus-visible outline + outline-offset
+   本文件把武汉大学官方视觉规范映射到 Docusaurus 的 Infima 变量体系。
+   参考：https://www.whu.edu.cn/xxgk/wdbs.htm
+   标准色：珞珈蓝 R:0 G:37 B:84 + 珞珈绿 R:17 G:87 B:64
+   辅助色：珞樱粉、东湖蓝、秋桂黄、春藤紫、黉瓦绿、霜叶红、晨雾灰
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
    1. Design Tokens
    -------------------------------------------------------------------------- */
 :root {
-  /* 品牌蓝：blue-50 → blue-900 */
-  --cc-blue-50: #eff6ff;
-  --cc-blue-100: #dbeafe;
-  --cc-blue-200: #bfdbfe;
-  --cc-blue-300: #93c5fd;
-  --cc-blue-400: #60a5fa;
-  --cc-blue-500: #3b82f6;
-  --cc-blue-600: #2563eb;
-  --cc-blue-700: #1d4ed8;
-  --cc-blue-800: #1e40af;
-  --cc-blue-900: #1e3a8a;
+  /* 主色：珞珈蓝 */
+  --cc-blue-50: #e6eef5;
+  --cc-blue-100: #c2d5e7;
+  --cc-blue-200: #8eb1cf;
+  --cc-blue-300: #598cb6;
+  --cc-blue-400: #2f6c9c;
+  --cc-blue-500: #154f80;
+  --cc-blue-600: #002554;   /* 珞珈蓝：品牌主色 */
+  --cc-blue-700: #001c40;
+  --cc-blue-800: #00142e;
+  --cc-blue-900: #000d1d;
 
-  /* 中性灰：slate-50 / gray-50 → gray-900 */
-  --cc-bg-page: #f8fafc; /* slate-50 */
-  --cc-bg-subtle: #f9fafb; /* gray-50  */
-  --cc-bg-muted: #f3f4f6; /* gray-100 */
+  /* 辅色：珞珈绿 */
+  --cc-green-50: #e6efeb;
+  --cc-green-100: #c1d8cc;
+  --cc-green-200: #94baa7;
+  --cc-green-300: #669b82;
+  --cc-green-400: #3f7e64;
+  --cc-green-500: #115740;   /* 珞珈绿 */
+  --cc-green-600: #0e4834;
+  --cc-green-700: #0b3929;
+  --cc-green-800: #08291d;
+  --cc-green-900: #051a12;
+
+  /* 中性灰（保留 Tailwind slate/gray 系列以保证 UI 一致性） */
+  --cc-bg-page: #f8fafc;
+  --cc-bg-subtle: #f9fafb;
+  --cc-bg-muted: #f3f4f6;
   --cc-bg-surface: #ffffff;
-  --cc-border: #e5e7eb; /* gray-200 */
-  --cc-border-strong: #d1d5db; /* gray-300 */
+  --cc-border: #e5e7eb;
+  --cc-border-strong: #d1d5db;
 
-  --cc-text-strong: #111827; /* gray-900 */
-  --cc-text: #374151; /* gray-700 */
-  --cc-text-muted: #6b7280; /* gray-500 */
-  --cc-text-faint: #9ca3af; /* gray-400 */
+  --cc-text-strong: #111827;
+  --cc-text: #374151;
+  --cc-text-muted: #6b7280;
+  --cc-text-faint: #9ca3af;
+
+  /* 武大辅助色（用于 Mermaid 图表、分类标签等需要多样色的场景） */
+  --cc-aux-pink: #f4b5c4;       /* 珞樱粉 */
+  --cc-aux-eastlake: #4a90c2;   /* 东湖蓝 */
+  --cc-aux-osmanthus: #d9a55a;  /* 秋桂黄 */
+  --cc-aux-ivy: #7c6b9a;        /* 春藤紫 */
+  --cc-aux-tile-green: #4a7c59; /* 黉瓦绿 */
+  --cc-aux-maple: #b54a4a;      /* 霜叶红 */
+  --cc-aux-mist: #8a8d91;       /* 晨雾灰 */
 
   /* 语义色 */
-  --cc-success: #16a34a; /* green-600 */
-  --cc-warning: #d97706; /* amber-600 */
-  --cc-danger: #dc2626; /* red-600  */
+  --cc-success: #115740;        /* 成功：珞珈绿 */
+  --cc-warning: #d97706;
+  --cc-danger: #b54a4a;         /* 危险：霜叶红 */
 
-  /* 圆角：rounded-lg / rounded-xl */
+  /* 圆角 / 阴影 */
   --cc-radius: 0.5rem;
   --cc-radius-xl: 0.75rem;
 
-  /* 阴影：shadow-sm / shadow / shadow-md（克制，不使用浮夸的超大阴影） */
-  --cc-shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.06);
-  --cc-shadow: 0 1px 3px 0 rgb(15 23 42 / 0.08), 0 1px 2px -1px rgb(15 23 42 / 0.06);
-  --cc-shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.1), 0 2px 6px -2px rgb(15 23 42 / 0.06);
+  --cc-shadow-sm: 0 1px 2px 0 rgb(0 37 84 / 0.06);
+  --cc-shadow: 0 1px 3px 0 rgb(0 37 84 / 0.08), 0 1px 2px -1px rgb(0 37 84 / 0.06);
+  --cc-shadow-md: 0 4px 12px -2px rgb(0 37 84 / 0.1), 0 2px 6px -2px rgb(0 37 84 / 0.06);
 
-  /* 动效：企业 UI 要利落，永不超过 200ms */
+  /* 动效 */
   --cc-duration-fast: 150ms;
   --cc-duration: 200ms;
   --cc-ease: ease-out;
-  --cc-lift: -2px; /* hover:-translate-y-0.5 */
-  --cc-press: 0.98; /* active:scale-[0.98] */
+  --cc-lift: -2px;
+  --cc-press: 0.98;
 
-  /* 语义化强调色（供 React 组件复用，自动适配明暗主题） */
-  --cc-accent: var(--cc-blue-600);
-  --cc-accent-hover: var(--cc-blue-700);
-  --cc-accent-soft: var(--cc-blue-50);
-  --cc-accent-soft-fg: var(--cc-blue-600);
+  /* 强调色：站点主按钮 / 链接默认走珞珈绿；软底色用于徽章 */
+  --cc-accent: var(--cc-green-600);
+  --cc-accent-hover: var(--cc-green-700);
+  --cc-accent-soft: var(--cc-green-50);
+  --cc-accent-soft-fg: var(--cc-green-600);
   --cc-accent-on: #ffffff;
 
   /* ---- 覆盖 Infima ---- */
-  --ifm-color-primary: var(--cc-blue-600);
-  --ifm-color-primary-dark: var(--cc-blue-700);
-  --ifm-color-primary-darker: var(--cc-blue-800);
-  --ifm-color-primary-darkest: var(--cc-blue-900);
-  --ifm-color-primary-light: var(--cc-blue-500);
-  --ifm-color-primary-lighter: var(--cc-blue-400);
-  --ifm-color-primary-lightest: var(--cc-blue-300);
+  --ifm-color-primary: var(--cc-green-600);
+  --ifm-color-primary-dark: var(--cc-green-700);
+  --ifm-color-primary-darker: var(--cc-green-800);
+  --ifm-color-primary-darkest: var(--cc-green-900);
+  --ifm-color-primary-light: var(--cc-green-500);
+  --ifm-color-primary-lighter: var(--cc-green-400);
+  --ifm-color-primary-lightest: var(--cc-green-300);
 
   --ifm-color-success: var(--cc-success);
   --ifm-color-warning: var(--cc-warning);
   --ifm-color-danger: var(--cc-danger);
 
-  /* 字体：系统字体栈，不使用 Inter / Roboto / Geist 等被滥用的字型 */
+  /* 字体 */
   --ifm-font-family-base: system-ui, -apple-system, 'Segoe UI', 'PingFang SC',
     'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
   --ifm-font-family-monospace: 'JetBrains Mono', 'Cascadia Code', 'SF Mono',
@@ -99,15 +110,15 @@
   --ifm-h2-font-size: 1.5rem;
   --ifm-h3-font-size: 1.25rem;
 
-  /* 排版层次 */
+  /* 排版 */
   --ifm-color-content: var(--cc-text);
   --ifm-color-content-secondary: var(--cc-text-muted);
   --ifm-heading-color: var(--cc-text-strong);
-  --ifm-link-color: var(--cc-blue-600);
-  --ifm-link-hover-color: var(--cc-blue-700);
+  --ifm-link-color: var(--cc-green-600);
+  --ifm-link-hover-color: var(--cc-green-700);
   --ifm-link-decoration: none;
 
-  /* 背景与表面 */
+  /* 背景 */
   --ifm-background-color: var(--cc-bg-page);
   --ifm-background-surface-color: var(--cc-bg-surface);
 
@@ -118,7 +129,7 @@
   --ifm-global-shadow-tl: var(--cc-shadow-md);
   --ifm-button-border-radius: var(--cc-radius);
 
-  /* 灰阶强调色（Infima 的边框 / 分隔线 / 次级背景均由此派生） */
+  /* 灰阶强调色 */
   --ifm-color-emphasis-0: #ffffff;
   --ifm-color-emphasis-100: var(--cc-bg-subtle);
   --ifm-color-emphasis-200: var(--cc-bg-muted);
@@ -137,13 +148,13 @@
   --ifm-navbar-height: 4rem;
   --ifm-navbar-padding-vertical: 0.75rem;
   --ifm-navbar-link-color: var(--cc-text);
-  --ifm-navbar-link-hover-color: var(--cc-blue-600);
+  --ifm-navbar-link-hover-color: var(--cc-green-600);
   --ifm-navbar-item-padding-horizontal: 0.875rem;
 
-  /* 侧边栏菜单 */
+  /* 侧边栏菜单：激活项用珞珈绿，背景用绿色软底，与页面浅灰有明显区分 */
   --ifm-menu-color: var(--cc-text);
-  --ifm-menu-color-active: var(--cc-blue-700);
-  --ifm-menu-color-background-active: var(--cc-blue-50);
+  --ifm-menu-color-active: var(--cc-green-600);
+  --ifm-menu-color-background-active: var(--cc-green-50);
   --ifm-menu-color-background-hover: var(--cc-bg-muted);
   --ifm-menu-link-padding-vertical: 0.4rem;
   --ifm-menu-link-padding-horizontal: 0.75rem;
@@ -155,10 +166,10 @@
   /* 代码 */
   --ifm-code-font-size: 92%;
   --ifm-code-background: var(--cc-bg-muted);
-  --ifm-code-color: var(--cc-blue-700);
+  --ifm-code-color: var(--cc-green-700);
   --ifm-pre-background: var(--cc-bg-subtle);
   --ifm-pre-border-radius: var(--cc-radius);
-  --docusaurus-highlighted-code-line-bg: rgb(37 99 235 / 0.08);
+  --docusaurus-highlighted-code-line-bg: rgb(0 37 84 / 0.08);
 
   /* 表格 */
   --ifm-table-border-color: var(--cc-border);
@@ -180,14 +191,14 @@
 }
 
 /* --------------------------------------------------------------------------
-   2. 暗色模式：保持同一套语言，仅调亮表面与文字，主色改用 blue-500 保证对比度
+   2. 暗色模式：珞珈蓝调到 blue-500 系列保证对比度，绿色保持绿系
    -------------------------------------------------------------------------- */
 [data-theme='dark'] {
-  --cc-bg-page: #0f172a; /* slate-900 */
+  --cc-bg-page: #0f172a;
   --cc-bg-subtle: #16203a;
-  --cc-bg-muted: #1e293b; /* slate-800 */
+  --cc-bg-muted: #1e293b;
   --cc-bg-surface: #1e293b;
-  --cc-border: #334155; /* slate-700 */
+  --cc-border: #334155;
   --cc-border-strong: #475569;
 
   --cc-text-strong: #f1f5f9;
@@ -195,29 +206,29 @@
   --cc-text-muted: #94a3b8;
   --cc-text-faint: #64748b;
 
-  --cc-accent: var(--cc-blue-600);
-  --cc-accent-hover: var(--cc-blue-500);
-  --cc-accent-soft: rgb(37 99 235 / 0.18);
-  --cc-accent-soft-fg: var(--cc-blue-400);
+  --cc-accent: var(--cc-green-400);
+  --cc-accent-hover: var(--cc-green-300);
+  --cc-accent-soft: rgb(17 87 64 / 0.32);
+  --cc-accent-soft-fg: #8eb1cf;  /* 暗色下的绿底文字保持偏亮绿 */
   --cc-accent-on: #ffffff;
 
-  --cc-success: #22c55e;
+  --cc-success: #3f7e64;
   --cc-warning: #f59e0b;
-  --cc-danger: #ef4444;
+  --cc-danger: #b54a4a;
 
-  --ifm-color-primary: var(--cc-blue-500);
-  --ifm-color-primary-dark: #2f74ea;
-  --ifm-color-primary-darker: #2563eb;
-  --ifm-color-primary-darkest: var(--cc-blue-700);
-  --ifm-color-primary-light: var(--cc-blue-400);
-  --ifm-color-primary-lighter: #7fb0fb;
-  --ifm-color-primary-lightest: var(--cc-blue-200);
+  --ifm-color-primary: var(--cc-green-400);
+  --ifm-color-primary-dark: var(--cc-green-500);
+  --ifm-color-primary-darker: var(--cc-green-600);
+  --ifm-color-primary-darkest: var(--cc-green-700);
+  --ifm-color-primary-light: var(--cc-green-300);
+  --ifm-color-primary-lighter: var(--cc-green-200);
+  --ifm-color-primary-lightest: var(--cc-green-100);
 
   --ifm-color-content: var(--cc-text);
   --ifm-color-content-secondary: var(--cc-text-muted);
   --ifm-heading-color: var(--cc-text-strong);
-  --ifm-link-color: var(--cc-blue-400);
-  --ifm-link-hover-color: var(--cc-blue-300);
+  --ifm-link-color: var(--cc-green-300);
+  --ifm-link-hover-color: var(--cc-green-200);
 
   --ifm-background-color: var(--cc-bg-page);
   --ifm-background-surface-color: var(--cc-bg-surface);
@@ -237,20 +248,20 @@
 
   --ifm-navbar-background-color: var(--cc-bg-surface);
   --ifm-navbar-link-color: var(--cc-text);
-  --ifm-navbar-link-hover-color: var(--cc-blue-400);
+  --ifm-navbar-link-hover-color: var(--cc-green-300);
 
   --ifm-menu-color: var(--cc-text);
-  --ifm-menu-color-active: var(--cc-blue-300);
-  --ifm-menu-color-background-active: rgb(37 99 235 / 0.18);
+  --ifm-menu-color-active: #3f7e64;
+  --ifm-menu-color-background-active: rgb(17 87 64 / 0.22);
   --ifm-menu-color-background-hover: rgb(148 163 184 / 0.12);
 
   --ifm-toc-border-color: var(--cc-border);
   --ifm-toc-link-color: var(--cc-text-muted);
 
   --ifm-code-background: rgb(148 163 184 / 0.16);
-  --ifm-code-color: var(--cc-blue-300);
+  --ifm-code-color: #94baa7;
   --ifm-pre-background: #0b1220;
-  --docusaurus-highlighted-code-line-bg: rgb(96 165 250 / 0.14);
+  --docusaurus-highlighted-code-line-bg: rgb(63 126 100 / 0.22);
 
   --ifm-table-head-background: var(--cc-bg-muted);
   --ifm-table-stripe-background: rgb(148 163 184 / 0.06);
@@ -280,11 +291,10 @@ h3,
 h4,
 h5,
 h6 {
-  letter-spacing: -0.02em; /* tracking-tight */
+  letter-spacing: -0.02em;
   color: var(--cc-text-strong);
 }
 
-/* 正文行宽控制在 65–75 字符以内，保证可读性 */
 .theme-doc-markdown p,
 .theme-doc-markdown li {
   max-width: 74ch;
@@ -294,7 +304,6 @@ h6 {
   line-height: 1.8;
 }
 
-/* 焦点环：ring-2 + ring-offset-2 的等价实现（outline-offset 让焦点环与元素分离） */
 :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
   outline: 2px solid var(--ifm-color-primary);
   outline-offset: 2px;
@@ -328,19 +337,18 @@ h6 {
 .navbar__link:hover,
 .navbar__link--active {
   color: var(--ifm-color-primary);
-  background-color: var(--cc-blue-50);
+  background-color: var(--cc-green-50);
 }
 
 [data-theme='dark'] .navbar__link:hover,
 [data-theme='dark'] .navbar__link--active {
-  background-color: rgb(37 99 235 / 0.18);
+  background-color: rgb(0 37 84 / 0.32);
 }
 
 .navbar__brand:hover {
   color: inherit;
 }
 
-/* 主题切换按钮 */
 .navbar [class*='toggleButton'] {
   border-radius: var(--cc-radius);
   transition: background-color var(--cc-duration-fast) var(--cc-ease);
@@ -355,7 +363,7 @@ h6 {
 }
 
 /* --------------------------------------------------------------------------
-   5. 按钮：rounded-lg + shadow-sm + hover 上浮 + active 缩放
+   5. 按钮
    -------------------------------------------------------------------------- */
 .button {
   border-radius: var(--cc-radius);
@@ -378,14 +386,14 @@ h6 {
 }
 
 .button--primary {
-  background-color: var(--cc-blue-600);
-  border-color: var(--cc-blue-600);
+  background-color: var(--cc-green-600);
+  border-color: var(--cc-green-600);
   color: #ffffff;
 }
 
 .button--primary:hover {
-  background-color: var(--cc-blue-700);
-  border-color: var(--cc-blue-700);
+  background-color: var(--cc-green-700);
+  border-color: var(--cc-green-700);
   color: #ffffff;
 }
 
@@ -419,7 +427,7 @@ h6 {
 .markdown a:not(.button) {
   font-weight: 500;
   text-decoration: underline;
-  text-decoration-color: var(--cc-blue-200);
+  text-decoration-color: var(--cc-green-200);
   text-underline-offset: 3px;
   transition: color var(--cc-duration-fast) var(--cc-ease),
     text-decoration-color var(--cc-duration-fast) var(--cc-ease);
@@ -430,7 +438,6 @@ h6 {
   text-decoration-color: currentColor;
 }
 
-/* 代码块：rounded-lg + 细边框 + 克制阴影 */
 .theme-code-block,
 div[class^='codeBlockContainer'] {
   border: 1px solid var(--cc-border);
@@ -445,7 +452,6 @@ div[class^='codeBlockContainer'] {
   box-shadow: none;
 }
 
-/* 行内代码 */
 :not(pre) > code {
   border: 1px solid var(--cc-border);
   border-radius: calc(var(--cc-radius) - 2px);
@@ -453,7 +459,6 @@ div[class^='codeBlockContainer'] {
   font-weight: 500;
 }
 
-/* 表格：表头浅灰、行悬停高亮 */
 .markdown table {
   display: table;
   width: 100%;
@@ -489,10 +494,9 @@ div[class^='codeBlockContainer'] {
 }
 
 .markdown table tbody tr:hover {
-  background-color: var(--cc-bg-subtle); /* hover:bg-gray-50 */
+  background-color: var(--cc-bg-subtle);
 }
 
-/* 引用块：细的常规引用标记，不使用粗色条装饰 */
 .markdown blockquote {
   background-color: var(--cc-bg-subtle);
   border-left: 3px solid var(--cc-border-strong);
@@ -501,7 +505,7 @@ div[class^='codeBlockContainer'] {
   color: var(--cc-text-muted);
 }
 
-/* 提示框：完整边框 + 圆角，去掉单侧粗色条 */
+/* 提示框 */
 .alert {
   border: 1px solid var(--cc-border);
   border-left-width: 1px;
@@ -511,15 +515,15 @@ div[class^='codeBlockContainer'] {
 }
 
 .alert--info {
-  --ifm-alert-background-color: var(--cc-blue-50);
-  --ifm-alert-border-color: var(--cc-blue-200);
-  --ifm-alert-background-color-highlight: var(--cc-blue-100);
+  --ifm-alert-background-color: var(--cc-green-50);
+  --ifm-alert-border-color: var(--cc-green-200);
+  --ifm-alert-background-color-highlight: var(--cc-green-100);
 }
 
 .alert--success {
-  --ifm-alert-background-color: #f0fdf4;
-  --ifm-alert-border-color: #bbf7d0;
-  --ifm-alert-background-color-highlight: #dcfce7;
+  --ifm-alert-background-color: var(--cc-green-50);
+  --ifm-alert-border-color: var(--cc-green-200);
+  --ifm-alert-background-color-highlight: var(--cc-green-100);
 }
 
 .alert--warning {
@@ -535,13 +539,13 @@ div[class^='codeBlockContainer'] {
 }
 
 [data-theme='dark'] .alert--info {
-  --ifm-alert-background-color: rgb(37 99 235 / 0.14);
-  --ifm-alert-border-color: rgb(59 130 246 / 0.4);
+  --ifm-alert-background-color: rgb(0 37 84 / 0.28);
+  --ifm-alert-border-color: rgb(47 108 156 / 0.45);
 }
 
 [data-theme='dark'] .alert--success {
-  --ifm-alert-background-color: rgb(34 197 94 / 0.12);
-  --ifm-alert-border-color: rgb(34 197 94 / 0.35);
+  --ifm-alert-background-color: rgb(17 87 64 / 0.22);
+  --ifm-alert-border-color: rgb(63 126 100 / 0.4);
 }
 
 [data-theme='dark'] .alert--warning {
@@ -550,30 +554,42 @@ div[class^='codeBlockContainer'] {
 }
 
 [data-theme='dark'] .alert--danger {
-  --ifm-alert-background-color: rgb(239 68 68 / 0.12);
-  --ifm-alert-border-color: rgb(239 68 68 / 0.35);
+  --ifm-alert-background-color: rgb(181 74 74 / 0.18);
+  --ifm-alert-border-color: rgb(181 74 74 / 0.4);
 }
 
-/* Mermaid 图表容器 */
+/* --------------------------------------------------------------------------
+   7. Mermaid 图表容器 —— 修复底部被遮盖问题
+   --------------------------------------------------------------------------
+   原容器使用 padding + overflow-x: auto，但 Mermaid svg 的 max-width:100%
+   会让 svg 高度按比例压缩（横向缩放时纵向被截断）；同时外层没有
+   `overflow: visible`，长文本节点的下半部分会被裁掉。
+   --------------------------------------------------------------------------
+*/
 .docusaurus-mermaid-container {
   display: flex;
   justify-content: center;
+  align-items: flex-start;
   margin: 1.5rem 0;
-  padding: 1.25rem;
+  padding: 1.5rem;
   background-color: var(--cc-bg-surface);
   border: 1px solid var(--cc-border);
   border-radius: var(--cc-radius-xl);
   box-shadow: var(--cc-shadow-sm);
+  /* 长图横向可能溢出（实验路线一长串节点），允许容器横向滚动；
+     但不让高度被截断——设 min-height 由内容决定 */
   overflow-x: auto;
+  overflow-y: visible;
 }
 
-/* 标题锚点 */
-.hash-link {
-  color: var(--cc-text-faint);
+.docusaurus-mermaid-container svg {
+  max-width: 100%;
+  height: auto !important;     /* 关键：让 svg 按内容自适应高度，不被强制裁切 */
+  display: block;
 }
 
 /* --------------------------------------------------------------------------
-   7. 侧边栏与目录
+   8. 侧边栏与目录
    -------------------------------------------------------------------------- */
 .theme-doc-sidebar-container {
   border-right: 1px solid var(--cc-border) !important;
@@ -588,8 +604,21 @@ div[class^='codeBlockContainer'] {
     color var(--cc-duration-fast) var(--cc-ease);
 }
 
+/* 选中态：所有激活的菜单项（叶子项 + 折叠分类标题）都得到同一套视觉提示 */
+.menu__link--active {
+  font-weight: 600;
+  background-color: var(--ifm-menu-color-background-active);
+  color: var(--ifm-menu-color-active);
+  border-left: 3px solid var(--cc-green-600);
+  padding-left: calc(0.75rem - 3px);
+}
+
 .menu__link--active:not(.menu__link--sublist) {
   font-weight: 600;
+}
+
+[data-theme='dark'] .menu__link--active {
+  border-left-color: #3f7e64;
 }
 
 .menu__list-item-collapsible {
@@ -622,7 +651,6 @@ div[class^='codeBlockContainer'] {
   background-color: var(--cc-bg-muted);
 }
 
-/* 上一页 / 下一页：卡片式，hover 上浮 */
 .pagination-nav__link {
   border: 1px solid var(--cc-border);
   border-radius: var(--cc-radius-xl);
@@ -637,7 +665,7 @@ div[class^='codeBlockContainer'] {
 .pagination-nav__link:hover {
   transform: translateY(var(--cc-lift));
   box-shadow: var(--cc-shadow-md);
-  border-color: var(--cc-blue-200);
+  border-color: var(--cc-green-200);
 }
 
 .pagination-nav__sublabel {
@@ -652,7 +680,7 @@ div[class^='codeBlockContainer'] {
 }
 
 /* --------------------------------------------------------------------------
-   8. 页脚：浅色专业风（bg-slate-50 / text-gray-700）
+   9. 页脚
    -------------------------------------------------------------------------- */
 .footer {
   background-color: var(--cc-bg-subtle);
@@ -697,9 +725,8 @@ div[class^='codeBlockContainer'] {
 }
 
 /* --------------------------------------------------------------------------
-   9. 其他细节
+   10. 其他细节
    -------------------------------------------------------------------------- */
-/* 搜索框 */
 .navbar__search-input {
   border: 1px solid var(--cc-border-strong);
   border-radius: var(--cc-radius);
@@ -714,7 +741,6 @@ div[class^='codeBlockContainer'] {
   border-color: var(--ifm-color-primary);
 }
 
-/* 返回顶部 */
 .theme-back-to-top-button {
   border-radius: var(--cc-radius);
   box-shadow: var(--cc-shadow);
@@ -725,7 +751,6 @@ div[class^='codeBlockContainer'] {
   transform: scale(var(--cc-press));
 }
 
-/* 徽章 / 标签 */
 .badge {
   border-radius: var(--cc-radius);
   font-weight: 500;
@@ -734,25 +759,23 @@ div[class^='codeBlockContainer'] {
 }
 
 .badge--primary {
-  background-color: var(--cc-blue-50);
-  color: var(--cc-blue-700);
-  border-color: var(--cc-blue-200);
+  background-color: var(--cc-green-50);
+  color: var(--cc-green-700);
+  border-color: var(--cc-green-200);
 }
 
 [data-theme='dark'] .badge--primary {
-  background-color: rgb(37 99 235 / 0.2);
-  color: var(--cc-blue-300);
-  border-color: rgb(59 130 246 / 0.35);
+  background-color: rgb(0 37 84 / 0.32);
+  color: #8eb1cf;
+  border-color: rgb(47 108 156 / 0.45);
 }
 
-/* 分割线 */
 hr {
   border: none;
   border-top: 1px solid var(--cc-border);
   margin: 2rem 0;
 }
 
-/* 文档页脚「编辑此页」等信息 */
 .theme-doc-footer {
   color: var(--cc-text-muted);
   font-size: 0.8125rem;
@@ -762,7 +785,7 @@ hr {
 }
 
 /* --------------------------------------------------------------------------
-   10. 无障碍：尊重 prefers-reduced-motion
+   11. 无障碍：尊重 prefers-reduced-motion
    -------------------------------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   *,

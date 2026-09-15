@@ -1,41 +1,123 @@
-.grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1.5rem;
+/* ==========================================================================
+   扇形布局：7 张卡片以 ToyC 圆心为中心，均匀分布在 360° 圆周上
+   实现：
+   - 容器正中是 center hub
+   - 每个插槽用 calc(var(--x)/var(--y) × radius) 定位到圆周对应点
+   - 用 transform: translate(-50%, -50%) 让卡片自身居中于该点
+   - 卡片不旋转，保持水平整齐排列
+   ========================================================================== */
+.fanOuter {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 容器高度由最小高度保证，宽度由 JS 控制中心点 */
+  width: 100%;
+  min-height: 44rem;
+  padding: 2.5rem 1.5rem;
+  isolation: isolate;
 }
 
+/* ---- 中心锚点圆 ---- */
+.fanHub {
+  position: absolute;
+  /* 放容器正中 */
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 6.5rem;
+  height: 6.5rem;
+  border-radius: 50%;
+  background-color: var(--cc-accent);
+  box-shadow:
+    0 0 0 5px var(--cc-bg-page),
+    0 0 0 7px var(--cc-accent),
+    var(--cc-shadow-md);
+  text-align: center;
+  pointer-events: none;
+}
+
+.fanHubLabel {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--cc-accent-on);
+  line-height: 1.2;
+}
+
+.fanHubSub {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: rgb(255 255 255 / 0.65);
+  margin-top: 0.25rem;
+  letter-spacing: 0.02em;
+}
+
+/* ---- 卡片层 ---- */
+.fanRing {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+}
+
+/* ---- 单个插槽 ---- */
+.fanSlot {
+  position: absolute;
+  /* 定位到圆周点：以中心为原点，沿 (x, y) 方向延伸 21rem */
+  /* translate(-50%, -50%) 让卡片自身中心对齐到该点 */
+  left: calc(var(--x) * 21rem);
+  top: calc(var(--y) * 21rem);
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+}
+
+/* ---- 卡片本体：水平排列，不旋转 ---- */
 .card {
   display: flex;
-  gap: 1rem;
-  height: 100%;
-  padding: 1.5rem;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem 0.875rem 0.75rem;
+  width: 16rem;
   background-color: var(--cc-bg-surface);
   border: 1px solid var(--cc-border);
   border-radius: var(--cc-radius-xl);
   box-shadow: var(--cc-shadow-sm);
   text-decoration: none;
   color: inherit;
-  transition: transform var(--cc-duration) var(--cc-ease),
+  transition:
     box-shadow var(--cc-duration) var(--cc-ease),
-    border-color var(--cc-duration) var(--cc-ease);
+    border-color var(--cc-duration) var(--cc-ease),
+    transform var(--cc-duration) var(--cc-ease);
 }
 
 .card:hover {
   text-decoration: none;
   color: inherit;
-  transform: translateY(var(--cc-lift));
+  border-color: var(--cc-green-200);
   box-shadow: var(--cc-shadow-md);
-  border-color: var(--cc-blue-200);
+  transform: translateY(-2px);
 }
 
 [data-theme='dark'] .card:hover {
-  border-color: var(--cc-blue-700);
+  border-color: var(--cc-green-700);
 }
 
-.index {
+/* ---- 卡片内部 ---- */
+.cardIndex {
   flex: none;
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2.125rem;
+  height: 2.125rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -43,62 +125,52 @@
   background-color: var(--cc-accent-soft);
   color: var(--cc-accent-soft-fg);
   font-size: 0.875rem;
-  font-weight: 600;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
-  transition: background-color var(--cc-duration) var(--cc-ease),
+  transition:
+    background-color var(--cc-duration) var(--cc-ease),
     color var(--cc-duration) var(--cc-ease),
     transform var(--cc-duration) var(--cc-ease);
 }
 
-.card:hover .index {
+.card:hover .cardIndex {
   background-color: var(--cc-accent);
   color: var(--cc-accent-on);
-  transform: scale(1.1);
+  transform: scale(1.12);
 }
 
-.body {
+.cardBody {
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
+  gap: 0.25rem;
   min-width: 0;
+  flex: 1;
 }
 
-.title {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
+.cardTitle {
   font-size: 0.9375rem;
   font-weight: 600;
-  letter-spacing: -0.01em;
   color: var(--cc-text-strong);
   margin: 0;
+  line-height: 1.3;
+  /* 允许换行 */
 }
 
-.arrow {
-  flex: none;
-  color: var(--cc-text-faint);
-  transition: transform var(--cc-duration) var(--cc-ease),
-    color var(--cc-duration) var(--cc-ease);
-}
-
-.card:hover .arrow {
-  color: var(--cc-accent);
-  transform: translateX(3px);
-}
-
-.description {
+.cardDesc {
   font-size: 0.8125rem;
-  line-height: 1.65;
   color: var(--cc-text-muted);
   margin: 0;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.meta {
+.cardMeta {
   display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
   align-self: flex-start;
-  margin-top: 0.375rem;
+  margin-top: 0.2rem;
   padding: 0.125rem 0.5rem;
   border: 1px solid var(--cc-border);
   border-radius: var(--cc-radius);
@@ -108,14 +180,90 @@
   color: var(--cc-text-muted);
 }
 
-@media (max-width: 996px) {
-  .grid {
-    grid-template-columns: 1fr;
+/* ==========================================================================
+   响应式
+   ========================================================================== */
+@media (max-width: 1100px) {
+  .fanSlot {
+    left: calc(var(--x) * 18rem);
+    top: calc(var(--y) * 18rem);
+  }
+
+  .card {
+    width: 14rem;
+    padding: 0.75rem 0.875rem 0.75rem 0.625rem;
+  }
+
+  .cardTitle {
+    font-size: 0.875rem;
+  }
+
+  .cardDesc {
+    font-size: 0.75rem;
+  }
+
+  .cardMeta {
+    font-size: 0.625rem;
   }
 }
 
-@media (min-width: 640px) and (max-width: 996px) {
-  .grid {
+@media (max-width: 768px) {
+  /* 平板及以下：降级为普通网格 */
+  .fanOuter {
+    min-height: auto;
+    padding: 0;
+  }
+
+  .fanHub {
+    display: none;
+  }
+
+  .fanRing {
+    position: static;
+    width: auto;
+    height: auto;
+    display: grid;
     grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+    padding: 1rem 0;
+    overflow: hidden;
+  }
+
+  .fanSlot {
+    position: static;
+    transform: none !important;
+    left: auto !important;
+    top: auto !important;
+  }
+
+  .card {
+    width: auto;
+    padding: 1rem 1.125rem;
+    transform: none !important;
+  }
+
+  .cardIndex {
+    width: 2.125rem;
+    height: 2.125rem;
+    font-size: 0.875rem;
+  }
+
+  .cardTitle {
+    font-size: 1rem;
+  }
+
+  .cardDesc {
+    font-size: 0.875rem;
+    -webkit-line-clamp: 3;
+  }
+
+  .cardMeta {
+    font-size: 0.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .fanRing {
+    grid-template-columns: 1fr;
   }
 }

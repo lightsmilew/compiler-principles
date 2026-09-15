@@ -48,13 +48,13 @@
 
 .btnPrimary {
   background-color: var(--cc-bg-surface);
-  color: var(--cc-blue-700);
+  color: var(--cc-green-700);
   border: 1px solid transparent;
   box-shadow: var(--cc-shadow-sm);
 }
 
 .btnPrimary:hover {
-  color: var(--cc-blue-800);
+  color: var(--cc-green-800);
   text-decoration: none;
   transform: translateY(var(--cc-lift));
   box-shadow: var(--cc-shadow-md);
@@ -80,33 +80,6 @@
 
 .btnSecondary:active {
   transform: translateY(0) scale(var(--cc-press));
-}
-
-/* ---------------- 统计条 ---------------- */
-.stats {
-  background-color: var(--cc-bg-surface);
-  border-bottom: 1px solid var(--cc-border);
-  padding: 2rem 0;
-}
-
-.statsGrid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 1.5rem;
-}
-
-.statValue {
-  font-size: 1.75rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--cc-text-strong);
-  line-height: 1.2;
-}
-
-.statLabel {
-  font-size: 0.8125rem;
-  color: var(--cc-text-muted);
-  margin-top: 0.25rem;
 }
 
 /* ---------------- 区块 ---------------- */
@@ -138,62 +111,6 @@
   line-height: 1.75;
   color: var(--cc-text-muted);
   margin: 0;
-}
-
-/* ---------------- 快速上手 ---------------- */
-.quickStart {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.5rem;
-  align-items: start;
-}
-
-.steps {
-  background-color: var(--cc-bg-surface);
-  border: 1px solid var(--cc-border);
-  border-radius: var(--cc-radius-xl);
-  box-shadow: var(--cc-shadow-sm);
-  padding: 1.5rem;
-  margin: 0;
-  list-style: none;
-}
-
-.step {
-  display: flex;
-  gap: 0.875rem;
-  padding: 0.75rem 0;
-}
-
-.step + .step {
-  border-top: 1px solid var(--cc-border);
-}
-
-.stepIndex {
-  flex: none;
-  width: 1.75rem;
-  height: 1.75rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--cc-radius);
-  background-color: var(--cc-accent-soft);
-  color: var(--cc-accent-soft-fg);
-  font-size: 0.8125rem;
-  font-weight: 600;
-}
-
-.stepTitle {
-  font-size: 0.9375rem;
-  font-weight: 500;
-  color: var(--cc-text-strong);
-  margin: 0 0 0.125rem;
-}
-
-.stepText {
-  font-size: 0.8125rem;
-  color: var(--cc-text-muted);
-  margin: 0;
-  line-height: 1.6;
 }
 
 .codeCard {
@@ -233,13 +150,238 @@
   color: var(--cc-text-faint);
 }
 
+.codePrompt {
+  color: var(--cc-accent);
+  font-weight: 500;
+}
+
 .codeKeyword {
-  color: var(--cc-blue-700);
+  color: var(--cc-green-700);
   font-weight: 500;
 }
 
 [data-theme='dark'] .codeKeyword {
-  color: var(--cc-blue-400);
+  color: var(--cc-green-400);
+}
+
+/* ---------------- Hero 编译流程条 ---------------- */
+.pipelineWrap {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  margin-bottom: 2rem;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(255 255 255 / 0.3) transparent;
+}
+
+/* 两端标签：ToyC / ELF */
+.pipelineEnd {
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding: 0 0.5rem;
+}
+
+.pipelineEndTag {
+  padding: 0.25rem 0.625rem;
+  border-radius: var(--cc-radius);
+  background-color: rgb(255 255 255 / 0.2);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgb(255 255 255 / 0.9);
+  white-space: nowrap;
+}
+
+/* 连接线 */
+.pipelineLine {
+  flex: none;
+  width: 1.5rem;
+  align-self: center;
+  border-top: 2px dashed rgb(255 255 255 / 0.35);
+  margin-top: -1rem; /* 抵消节点上半部的偏移，保持视觉居中 */
+}
+
+/* 阶段节点 */
+.pipelineNode {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 0.625rem;
+  min-width: 5.5rem;
+}
+
+.pipelineNodeNum {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.05em;
+  color: rgb(255 255 255 / 0.7);
+  margin-bottom: 0.25rem;
+}
+
+.pipelineNodeLabel {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgb(255 255 255 / 0.95);
+  text-align: center;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.pipelineNodeDetail {
+  font-size: 0.625rem;
+  color: rgb(255 255 255 / 0.7);
+  text-align: center;
+  margin-top: 0.25rem;
+  white-space: nowrap;
+  max-width: 6rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------------- 交替区块背景 ---------------- */
+.sectionAlt {
+  background-color: var(--cc-bg-subtle);
+  border-top: 1px solid var(--cc-border);
+  border-bottom: 1px solid var(--cc-border);
+}
+
+/* ---------------- 编译流程图 ---------------- */
+.pipelineGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.pipelineCard {
+  display: flex;
+  gap: 0.875rem;
+  align-items: flex-start;
+  padding: 1.125rem 1.25rem;
+  background-color: var(--cc-bg-surface);
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius-xl);
+  box-shadow: var(--cc-shadow-sm);
+  transition: transform var(--cc-duration) var(--cc-ease),
+    box-shadow var(--cc-duration) var(--cc-ease),
+    border-color var(--cc-duration) var(--cc-ease);
+}
+
+.pipelineCard:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--cc-shadow);
+  border-color: var(--cc-green-200);
+}
+
+[data-theme='dark'] .pipelineCard:hover {
+  border-color: var(--cc-green-700);
+}
+
+.pipelineNum {
+  flex: none;
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  color: var(--cc-green-600);
+  line-height: 1;
+  margin-top: 0.125rem;
+  opacity: 0.7;
+}
+
+[data-theme='dark'] .pipelineNum {
+  color: var(--cc-green-400);
+}
+
+.pipelineInfo {
+  min-width: 0;
+}
+
+.pipelineLabel {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--cc-text-strong);
+  margin: 0 0 0.25rem;
+  line-height: 1.3;
+}
+
+.pipelineDetail {
+  font-size: 0.8125rem;
+  color: var(--cc-text-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ---------------- 快速上手 ---------------- */
+.quickStartWrap {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.quickStartSteps,
+.quickStartCommands {
+  background-color: var(--cc-bg-surface);
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius-xl);
+  box-shadow: var(--cc-shadow-sm);
+  padding: 1.5rem;
+}
+
+.qsTitle {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--cc-text-strong);
+  margin: 0 0 1.25rem;
+  letter-spacing: -0.015em;
+}
+
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.step {
+  display: flex;
+  gap: 0.875rem;
+  padding: 0.875rem 0;
+}
+
+.step + .step {
+  border-top: 1px solid var(--cc-border);
+}
+
+.stepNum {
+  flex: none;
+  width: 1.75rem;
+  height: 1.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--cc-radius);
+  background-color: var(--cc-accent-soft);
+  color: var(--cc-accent-soft-fg);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.stepTitle {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--cc-text-strong);
+  margin: 0 0 0.25rem;
+  line-height: 1.3;
+}
+
+.stepText {
+  font-size: 0.8125rem;
+  color: var(--cc-text-muted);
+  margin: 0;
+  line-height: 1.6;
 }
 
 /* ---------------- 底部 CTA ---------------- */
@@ -337,21 +479,16 @@
 }
 
 @media (max-width: 996px) {
-  .statsGrid {
+  .pipelineGrid {
     grid-template-columns: repeat(2, 1fr);
-    gap: 1.5rem 1rem;
   }
 
-  .quickStart {
+  .quickStartWrap {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 480px) {
-  .statsGrid {
-    grid-template-columns: 1fr;
-  }
-
   .actions {
     width: 100%;
   }
@@ -360,5 +497,13 @@
   .btnSecondary {
     flex: 1 1 auto;
     justify-content: center;
+  }
+
+  .pipelineGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .heroPipeline {
+    display: none;
   }
 }

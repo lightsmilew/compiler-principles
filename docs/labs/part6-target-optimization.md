@@ -116,8 +116,8 @@ while changed:
 ```bash
 cmake -S . -B build
 cmake --build build
-./build/mycompiler --dump-asm < input.tc > baseline.s
-./build/mycompiler --dump-asm -opt < input.tc > optimized.s
+./compiler --dump-asm < input.tc > baseline.s
+./compiler --dump-asm -opt < input.tc > optimized.s
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
   -nostdlib -static optimized.s libtoyc.a -o out.elf
 ./out < input.txt
@@ -135,3 +135,16 @@ part6-target-optimization/
 ```
 
 报告必须包含活跃区间、冲突图、寄存器分配、spill 统计、窥孔规则、指令数对比和优化前后运行结果。
+
+## 六、本部分优化项速查
+
+目标代码优化已在侧边栏「**目标代码优化**」分类下展开为独立子页面，每页深入讲解一种优化主题：
+
+| 子页面 | 涵盖主题 | 关键考点 |
+| --- | --- | --- |
+| [活跃区间与冲突图](../optim/asm-liveness) | 虚拟寄存器活跃区间、冲突图、调用约定、move-aware | 寄存器分配的前置 |
+| [线性扫描寄存器分配](../optim/asm-linear-scan) | 扫描算法、跨调用处理、栈槽分配 | 实现简单、性能足够 |
+| [图着色寄存器分配](../optim/asm-graph-coloring) | 简化、合并、冻结、spill 选择、回填颜色 | 加分项 |
+| [Spill / Reload](../optim/asm-spill) | 溢出代码模式、rematerialization、栈槽分配、spill 优化 | 不可避免的副产品 |
+| [窥孔优化](../optim/asm-peephole) | 局部模式匹配、规则迭代、典型规则 | 与寄存器分配配合 |
+| [强度削减](../optim/asm-strength-reduction) | 乘法/除法替换、归纳变量、循环展开配合 | 循环优化收益大 |

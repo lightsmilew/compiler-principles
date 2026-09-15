@@ -4,6 +4,7 @@ sidebar_label: 开发环境与工具链
 title: 开发环境与工具链
 description: 编译器实验所需的环境准备、推荐工具与最小可运行验证
 ---
+---
 
 # 开发环境与工具链
 
@@ -142,7 +143,7 @@ g++ --version
 如果 `pip` 不可用，先执行 `sudo apt install -y python3-pip`；也可以从
 [CMake 官方下载页](https://cmake.org/download/) 下载 CMake 4.0.3 的 Linux 二进制包。
 
-:::warning 使用生成器的前提
+:::warning[使用生成器的前提]
 若使用 Flex/Bison，实验报告中必须给出完整的 `.l` / `.y` 文件，
 并额外说明如何手工构造等价的分析器；否则该实验最高按 80% 计分。
 :::
@@ -202,18 +203,44 @@ QEMU 用户态模式适合运行单个 RV64 Linux/静态 ELF；如果课程环�
 
 未提供 `-opt` 时优先保证功能正确；提供 `-opt` 时可以启用常量折叠、局部死代码消除和表达式简化，也可以暂时忽略该参数。两种模式都必须输出合法的 RV64GC 汇编。
 
+
+## 附：参考文档下载
+
+以下文档可在本地离线阅读，也可通过下方链接重新下载：
+
+- [下载 QEMU 本地调试指南](pathname:///pdf/QEMU本地调试指南.pdf) — 在 QEMU 中单步调试编译器生成的 RISC-V 汇编
+- [下载 SysY2022 语言定义](pathname:///pdf/SysY2022语言定义-V1.pdf) — 编译系统赛的官方语言规范（基本数据类型、语句、函数等）
+- [下载 SysY2022 运行时库](pathname:///pdf/SysY2022运行时库-V1.pdf) — `getint`、`putint` 等运行时函数的接口说明
+- [下载 SysY2026 扩展规范](pathname:///pdf/Sysy2026.pdf) — 张量（tensor）类型与矩阵乘法运算符 `@`
+
+下载后放到 `third_party/docs/` 目录下便于随时查阅：
+
+```bash
+mkdir -p third_party/docs
+# SITE_BASE_URL 是站点根 URL，未设置时使用本地开发服务器
+# 部署到 GitHub Pages 后通常设置为 https://<username>.github.io
+curl -L -o third_party/docs/QEMU本地调试指南.pdf \
+    "${SITE_BASE_URL:-http://localhost:3000}/compiler-principles/pdf/QEMU本地调试指南.pdf"
+curl -L -o third_party/docs/SysY2022语言定义-V1.pdf \
+    "${SITE_BASE_URL:-http://localhost:3000}/compiler-principles/pdf/SysY2022语言定义-V1.pdf"
+curl -L -o third_party/docs/SysY2022运行时库-V1.pdf \
+    "${SITE_BASE_URL:-http://localhost:3000}/compiler-principles/pdf/SysY2022运行时库-V1.pdf"
+curl -L -o third_party/docs/Sysy2026.pdf \
+    "${SITE_BASE_URL:-http://localhost:3000}/compiler-principles/pdf/Sysy2026.pdf"
+```
+
 ## 三、目录约定
 
 每个实验在仓库中占一个独立目录，建议结构如下：
 
 ```text
 labs/
-├── lab1-lexer/
+├── part1-lexer/
 │   ├── src/            # 源代码
-│   ├── tests/          # 测试用例（.mc 输入 + .expected 期望输出）
+│   ├── tests/          # 测试用例（.tc 输入 + .expected 期望输出）
 │   ├── Makefile        # 或 build.sh / pom.xml
 │   └── README.md       # 简要说明如何构建与运行
-└── lab2-parser/
+└── part2-parser/
 ```
 
 ## 四、最小可运行验证
@@ -232,7 +259,7 @@ int main() {
 EOF
 
 # 3. 用统一驱动处理它（实验一之后应能输出 Token 流）
-./mycompiler --dump-tokens < hello.mc
+./compiler --dump-tokens < hello.mc
 ```
 
 如果能正常输出 Token 流而程序不崩溃，环境即准备完成。

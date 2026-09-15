@@ -130,7 +130,7 @@ AST 应丢弃不影响语义的括号和分隔符，但保留源位置，便于�
 
 ## 五、选做：语义分析
 
-语法分析完成后，可以继续阅读[选做·语义分析](./optional-semantic.md)，在 AST 与 LLVM IR 生成之间加入符号表、作用域、类型和控制流约束检查。语义分析不属于本部分的必做提交。
+语法分析完成后，可以继续阅读[选做·语义分析](./optional-semantic)，在 AST 与 LLVM IR 生成之间加入符号表、作用域、类型和控制流约束检查。语义分析不属于本部分的必做提交。
 
 ## 六、提交物
 
@@ -139,8 +139,8 @@ AST 应丢弃不影响语义的括号和分隔符，但保留源位置，便于�
 ```bash
 cmake -S . -B build
 cmake --build build
-./build/mycompiler --dump-ast < tests/precedence.tc
-./build/mycompiler --dump-ast --parser ll1 < tests/precedence.tc
+./compiler --dump-ast < tests/precedence.tc
+./compiler --dump-ast --parser ll1 < tests/precedence.tc
 ```
 
 报告需包含：文法改写、FIRST/FOLLOW 集、分析表或递归下降实现、AST 节点设计、错误恢复策略和测试结果。测试应覆盖优先级、结合性、嵌套语句、函数调用和非法输入。

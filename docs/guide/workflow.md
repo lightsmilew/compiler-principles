@@ -25,28 +25,28 @@ flowchart TD
 ### 分支模型
 
 - `main`：只接受合并，不直接开发；
-- `labN`：每个实验一个分支，例如 `lab1-lexer`；
+- `partN`：每个实验部分一个分支，例如 `part1-lexer`；
 - 提交信息使用如下格式：
 
 ```text
-<lab>: <简述>
+<part>: <简述>
 
 例：
-lab1: 实现标识符与数字常量的扫描
-lab1: 修复注释跨行时的状态回退缺陷
+part1: 实现标识符与数字常量的扫描
+part1: 修复注释跨行时的状态回退缺陷
 ```
 
 ### 提交内容
 
-每个实验提交时必须包含：
+每个实验提交时只需包含：
 
-1. **源代码**：可独立构建运行；
-2. **构建脚本**：`Makefile` / `build.sh` / `pom.xml`，确保助教一条命令可编译；
-3. **测试用例**：至少 5 组，覆盖正常输入与边界输入；
-4. **实验报告**：`report.md`，规范见 [实验报告与提交规范](./report.md)。
+1. **源代码**：对应实验目录下的所有源代码文件；
+2. **构建脚本**：`Makefile` / `CMakeLists.txt` / `pom.xml` 等，确保一条命令从干净环境构建出可执行文件。
 
-:::danger 禁止事项
-- 禁止提交编译产物（`a.out`、`*.class`、`*.o`）与 IDE 配置目录；
+可选提交（不影响基础分）：测试用例和实验报告。
+
+:::danger[禁止事项]
+- 禁止提交编译产物（`a.out`、`*.class`、`*.o`）、测试用例与 IDE 配置目录；
 - 禁止抄袭。代码相似度检测工具会跨届比对，一经确认双方均为零分。
 :::
 
@@ -75,20 +75,20 @@ error: line 12, column 5: unexpected character '@'
 统一驱动使用原实验约定的 `--dump-*` 开关，并从标准输入读取 ToyC 源程序、向标准输出写入阶段结果：
 
 ```bash
-./mycompiler --dump-tokens < input.tc                 # 词法检查
-./mycompiler --dump-ast < input.tc                    # 语法/AST 检查
-./mycompiler --dump-symtab < input.tc                 # 选做语义分析
-./mycompiler --dump-ir < input.tc                     # LLVM IR
-./mycompiler --dump-ir --opt < input.tc               # 优化后的 LLVM IR
-./mycompiler --dump-asm < input.tc > output.s         # RV64GC 汇编
-./mycompiler --dump-asm -opt < input.tc > optimized.s # 优化后 RV64GC 汇编
+./compiler --dump-tokens < input.tc          # 第一部分：Token 流
+./compiler --dump-ast < input.tc           # 第二部分：AST
+./compiler --dump-symtab < input.tc        # 选做：符号表
+./compiler --dump-ir < input.tc            # 第三部分：LLVM IR
+./compiler --dump-ir --opt < input.tc      # 第三部分：优化后 LLVM IR
+./compiler --dump-asm < input.tc > out.s   # 第四部分：基线汇编
+./compiler --dump-asm -opt < input.tc > opt.s  # 第五、六部分：优化汇编
 ```
 
 `--dump-*` 模式用于检查中间结果；最终评测重点是 `--dump-asm` 产生的 RV64GC 汇编及其运行结果。
 
 ## 四、验收方式
 
-提交前请阅读[希冀提交与评测](./submission.md)，完成干净目录 clone、构建、RV64GC 汇编链接和 QEMU 运行检查。
+提交前请阅读[希冀提交与评测](./submission)，完成干净目录 clone、构建、RV64GC 汇编链接和 QEMU 运行检查。
 
 - **自动测试**：助教用统一的测试集运行你的编译器，比对输出；
 - **现场答辩**：随机抽取一段代码，要求你口述其在本阶段被如何处理；
@@ -98,9 +98,9 @@ error: line 12, column 5: unexpected character '@'
 
 | 周次 | 内容 |
 | --- | --- |
-| 第 2 周 | 实验一完成验收 |
-| 第 4 周 | 实验二、三完成验收 |
-| 第 6 周 | 实验四完成验收 |
-| 第 8 周 | 实验五完成验收 |
-| 第 10 周 | 实验六、七完成验收 |
+| 第 2 周 | 第一部分完成验收 |
+| 第 4 周 | 第二、三部分完成验收 |
+| 第 6 周 | 第四部分完成验收 |
+| 第 8 周 | 第五部分完成验收 |
+| 第 10 周 | 第六部分完成验收 |
 | 第 12–16 周 | 综合课程设计 |

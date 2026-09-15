@@ -90,7 +90,7 @@ flowchart TD
 ### Q：布尔表达式的短路求值怎么写？
 
 用回填（backpatching）技术：先生成跳转指令占位，待目标确定后再填写标号。
-参见 [实验五](../labs/lab5-ir.md) 中的回填示例。
+参见 [第五部分](../labs/part5-ir-optimization) 中的回填示例。
 
 ## 实验六 · 代码优化
 

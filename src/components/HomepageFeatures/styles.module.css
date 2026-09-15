@@ -22,11 +22,11 @@
 .card:hover {
   transform: translateY(var(--cc-lift));
   box-shadow: var(--cc-shadow-md);
-  border-color: var(--cc-blue-200);
+  border-color: var(--cc-green-200);
 }
 
 [data-theme='dark'] .card:hover {
-  border-color: var(--cc-blue-700);
+  border-color: var(--cc-green-700);
 }
 
 /* 图标容器：hover 时底色转为品牌蓝、图标转白并放大（group + hover:scale-110） */

@@ -86,10 +86,10 @@ ret i32 20
 ```bash
 cmake -S . -B build
 cmake --build build
-./build/mycompiler --dump-ir < input.tc > before.ll
-./build/mycompiler --dump-ir --opt < input.tc > after.ll
-./build/mycompiler --dump-asm < input.tc > before.s
-./build/mycompiler --dump-asm -opt < input.tc > after.s
+./compiler --dump-ir < input.tc > before.ll
+./compiler --dump-ir --opt < input.tc > after.ll
+./compiler --dump-asm < input.tc > before.s
+./compiler --dump-asm -opt < input.tc > after.s
 ```
 
 分别链接并运行两个版本，比较输出和退出码；同时报告 IR 指令数、基本块数和优化前后差异。
@@ -108,3 +108,16 @@ part5-ir-optimization/
 ```
 
 `README.md` 需要说明 LLVM IR 输入输出、优化等级和命令行参数；`report.md` 需要包含 CFG、Use-Def、数据流方程、优化规则、正确性证明思路和测试结果。
+
+## 五、本部分优化项速查
+
+机器无关代码优化已在侧边栏「**机器无关代码优化**」分类下展开为独立子页面，每页深入讲解一种优化主题：
+
+| 子页面 | 涵盖主题 | 关键考点 |
+| --- | --- | --- |
+| [基本块与 CFG](../optim/ir-cfg) | 基本块划分、控制流图、活跃变量 | 所有优化的前置 |
+| [死代码消除](../optim/ir-dce) | 活跃分析 DCE、Use-Def DCE、不可达代码 | 与 CFG 简化配合迭代 |
+| [常量折叠 / 传播 / 复制传播](../optim/ir-cprop) | 编译期折叠、SSA 传播、代数恒等式 | 优化管线第一档 |
+| [公共子表达式消除（CSE）](../optim/ir-cse) | 可用表达式分析、局部/全局 CSE、GVN 简介 | 支配路径上复用 |
+| [控制流简化](../optim/ir-cfg-simplify) | 不可达块、恒真分支、块合并、phi 退化 | 与 DCE 配对执行 |
+| [循环不变代码外提（LICM）](../optim/ir-licm) | 自然循环、预头、不变指令判定、外提 | 减少循环体指令 |

@@ -98,7 +98,7 @@ scan_token():
 ```bash
 cmake -S . -B build
 cmake --build build
-./build/mycompiler --dump-tokens < tests/basic.tc > tokens.txt
+./compiler --dump-tokens < tests/basic.tc > tokens.txt
 ```
 
 ```text
