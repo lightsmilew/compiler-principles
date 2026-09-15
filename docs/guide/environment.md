@@ -177,10 +177,10 @@ qemu-riscv64 ./out.elf
 
 ### 4. QEMU 启动与标准输入
 
-编译器本身从标准输入读取 ToyC 源代码，生成汇编到标准输出：
+编译器本身从标准输入读取 ToyC 源代码，生成汇编到标准输出。**可执行文件统一命名为 `compiler`**：
 
 ```bash
-./your_compiler < test.c > test.s
+./compiler < test.c > test.s
 ```
 
 链接后，使用 QEMU 运行 RV64 程序，并把测试数据传给被编译程序的标准输入：
@@ -198,11 +198,37 @@ QEMU 用户态模式适合运行单个 RV64 Linux/静态 ELF；如果课程环�
 编译器应接受可选参数 `-opt`：
 
 ```bash
-./your_compiler -opt < test.c > optimized.s
+./compiler -opt < test.c > optimized.s
 ```
 
 未提供 `-opt` 时优先保证功能正确；提供 `-opt` 时可以启用常量折叠、局部死代码消除和表达式简化，也可以暂时忽略该参数。两种模式都必须输出合法的 RV64GC 汇编。
 
+
+## 三、目录约定
+
+仓库采用**单根布局**：所有实验共享同一个编译器源码和构建脚本，评测机通过调用不同命令行接口（`--dump-tokens` / `--check-ast` / `--dump-asm` 等）区分实验阶段。
+
+```text
+ToyC/
+├── CMakeLists.txt           # 或 Makefile / pom.xml / build.gradle（推荐 CMake）
+├── src/                     # 全部实验的源代码（含词法、语法、IR、目标代码、优化）
+│   ├── lexer/
+│   ├── parser/
+│   ├── ir/
+│   ├── codegen/
+│   └── optim/
+├── third_party/             # 第三方依赖与下载的参考文档
+│   └── toyc/libtoyc.a       # 运行时库（课程组提供，本地调试用）
+├── README.md                # 构建、运行、参数说明
+└── group.csv                # 小组名单
+```
+
+要点：
+
+- 构建脚本放在**仓库根目录**，`src/` 下按模块划分子目录，不再为每个实验单独建目录；
+- 不需要在仓库中维护 `tests/` 目录，评测机自带测试集；
+- 源码仓库目录名由你决定（教程中统一用 `your_compiler_name` 作为占位，如 `toyc-cpp`、`toyc-java`、`toyc-ocaml`），但**编译产物（可执行文件）必须统一命名为 `compiler`**，评测平台以这个名字调用；
+- 运行时库 `libtoyc.a` 由评测平台提供，不要提交到仓库；本地调试时放在 `third_party/toyc/libtoyc.a` 即可。
 
 ## 附：参考文档下载
 
@@ -229,20 +255,6 @@ curl -L -o third_party/docs/Sysy2026.pdf \
     "${SITE_BASE_URL:-http://localhost:3000}/compiler-principles/pdf/Sysy2026.pdf"
 ```
 
-## 三、目录约定
-
-每个实验在仓库中占一个独立目录，建议结构如下：
-
-```text
-labs/
-├── part1-lexer/
-│   ├── src/            # 源代码
-│   ├── tests/          # 测试用例（.tc 输入 + .expected 期望输出）
-│   ├── Makefile        # 或 build.sh / pom.xml
-│   └── README.md       # 简要说明如何构建与运行
-└── part2-parser/
-```
-
 ## 四、最小可运行验证
 
 在正式动手前，请先确保下面的命令能跑通，这证明你的工具链是完整的：
@@ -259,6 +271,7 @@ int main() {
 EOF
 
 # 3. 用统一驱动处理它（实验一之后应能输出 Token 流）
+#    可执行文件统一叫 compiler，仓库目录名由你自取
 ./compiler --dump-tokens < hello.mc
 ```
 

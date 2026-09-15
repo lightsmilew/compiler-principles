@@ -112,20 +112,24 @@ pie showData
 
 ## 四、提交方式
 
+实验代码提交到仓库后由评测平台自动拉取与编译；实验报告由后续统一提供的提交入口单独提交，**不要把 `report.md` 放进仓库一并提交**。
+
+提交代码时按以下步骤操作：
+
 ```bash
 # 1. 切到本次实验的分支
 git checkout -b part1-lexer
 
-# 2. 提交代码与报告
-git add labs/part1-lexer
-git commit -m "part1: 完成词法分析器与实验报告"
+# 2. 提交本次实验的代码（仅源码与构建脚本，不要包含实验报告）
+git add .
+git commit -m "part1: 完成词法分析器"
 
 # 3. 推送到远端并发起 PR
 git push -u origin part1-lexer
 ```
 
 在 GitHub 上发起 Pull Request，标题格式为 `[Part1] 学号 姓名`，
-描述中填写自测通过率。
+描述中填写自测通过率，并按要求填写实验报告提交入口提供的字段。
 
 :::tip[关于 Latex]
 报告中如果出现文法产生式，建议使用 Markdown 内联代码或代码块书写，

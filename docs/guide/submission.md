@@ -15,11 +15,11 @@ description: 最多四人组队、Git 仓库可访问性、构建入口和希冀
 ToyC/
 ├── CMakeLists.txt 或 Makefile / pom.xml / build.gradle / dune-project
 ├── src/                         # 编译器源代码
-├── README.md                    # 构建、运行、参数说明
+├── README.md                    # 编译器架构、算法实现思路说明
 └── group.csv                    # 必需：小组名单和提交信息
 ```
 
-上表是评测所需的最小结构。每个实验只需提交源代码（`src/` 或对应语言源码）和小组名单 `group.csv`；`tests/`、`report.md` 和 `libtoyc.a` 不要求提交到仓库，libtoyc.a 由评测平台统一提供。如果课程平台另有上传入口，按助教通知提交。`README.md` 必须给出一条从干净 Linux 环境开始的构建命令，并明确可执行文件名。评测程序不能依赖 IDE、Windows 路径、绝对路径或本机缓存。
+上表是评测所需的最小结构。每个实验只需提交源代码（`src/` 或对应语言源码）和小组名单 `group.csv`；`tests/`、`实验报告` 和 `libtoyc.a` 不要求提交到仓库，libtoyc.a 由评测平台统一提供。如果课程平台另有上传入口，按助教通知提交。评测程序不能依赖 IDE、Windows 路径、绝对路径或本机缓存。
 
 ## 二、模板文件
 
@@ -49,16 +49,13 @@ curl -L -o group.csv "${SITE_BASE_URL:-http://localhost:3000}/compiler-principle
 
 ## 四、编译器命令行约定
 
-编译器从标准输入读取 ToyC 源代码，把 RV64GC 汇编写到标准输出：
+编译器从标准输入读取 ToyC 源代码，把 RV64GC 汇编写到标准输出。完整的命令行接口与各开关的含义见 [统一驱动接口](../labs/capstone#五统一驱动接口)。
+
+最常用的两种调用：
 
 ```bash
-./compiler --dump-asm < test.c > test.s
-```
-
-可选优化参数：
-
-```bash
-./compiler --dump-asm -opt < test.c > optimized.s
+./compiler --dump-asm < test.c > test.s          # 基线汇编
+./compiler --dump-asm -opt < test.c > optimized.s  # 含基础优化
 ```
 
 没有 `-opt` 时保证功能正确；有 `-opt` 时可以启用基础优化，也可以忽略该参数。诊断信息写到标准错误，成功返回 0，输入错误返回非零值。
@@ -95,8 +92,7 @@ riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
 - **仓库地址**：GitHub、Gitee 或 GitLab 的 Git clone URL，例如 `https://gitee.com/<account>/<repository>.git`；
 - **分支名**：例如 `main` 或 `submission`；
 - **访问令牌**：仅在仓库为私有时填写，使用只读权限令牌；
-- **构建入口**：例如 `CMakeLists.txt`、`Makefile`、`pom.xml` 或 `dune-project`；
-- **可执行文件或主类名**：与 `README.md` 中的命令一致。
+
 
 仓库地址必须是评测服务器可以访问的 clone URL，不要提交本机路径（如 `D:\work\...`、`/home/user/...`）或网页首页 URL。提交前在一个干净目录测试：
 

@@ -36,27 +36,44 @@ part1: 实现标识符与数字常量的扫描
 part1: 修复注释跨行时的状态回退缺陷
 ```
 
-### 提交内容
-
-每个实验提交时只需包含：
-
-1. **源代码**：对应实验目录下的所有源代码文件；
-2. **构建脚本**：`Makefile` / `CMakeLists.txt` / `pom.xml` 等，确保一条命令从干净环境构建出可执行文件。
-
-可选提交（不影响基础分）：测试用例和实验报告。
-
-:::danger[禁止事项]
-- 禁止提交编译产物（`a.out`、`*.class`、`*.o`）、测试用例与 IDE 配置目录；
-- 禁止抄袭。代码相似度检测工具会跨届比对，一经确认双方均为零分。
-:::
+提交内容与禁止事项见[希冀提交与评测](./submission)。
 
 ## 三、代码规范
 
 ### 命名与注释
 
-- 类型名用 `PascalCase`，函数与变量用 `snake_case`（Java 用 `camelCase`）；
-- 每个源文件头部注明：实验名称、学号、姓名、日期；
-- 关键算法（如子集构造、First/Follow 计算、活变量分析）必须写明算法出处与复杂度。
+按语言选择对应的命名规则，同一项目内必须保持一致：
+
+- **类型名**：使用 **PascalCase**（首字母大写的驼峰），如 `Token`、`BasicBlock`、`LiveInterval`；
+- **函数与变量（C / C++ / OCaml）**：使用 **snake_case**（全小写下划线连接），如 `next_token`、`current_line`；
+- **函数与变量（Java）**：使用 **camelCase**（首字母小写的驼峰），如 `nextToken`、`currentLine`；
+- **常量**：使用 **UPPER_SNAKE_CASE**（全大写下划线），如 `MAX_TOKEN_LEN`、`EOF`。
+
+示例：
+
+```cpp
+// C/C++ / OCaml 风格
+struct Token {                  // 类型名 PascalCase
+  TokenType type;               // 变量名 snake_case
+  std::string lexeme;
+  int line_no;
+};
+
+Token next_token();             // 函数名 snake_case
+static constexpr int MAX_LEN = 64;  // 常量 UPPER_SNAKE_CASE
+
+// Java 风格
+class Token {                   // 类型名 PascalCase
+  TokenType type;               // 变量名 camelCase
+  String lexeme;
+  int lineNo;
+}
+
+Token nextToken();              // 函数名 camelCase
+static final int MAX_LEN = 64;  // 常量 UPPER_SNAKE_CASE
+```
+
+关键算法（如子集构造、First/Follow 计算、活变量分析）必须写明算法逻辑（如果复现某种算法需要介绍出处）。
 
 ### 错误处理
 
@@ -76,8 +93,7 @@ error: line 12, column 5: unexpected character '@'
 
 ```bash
 ./compiler --dump-tokens < input.tc          # 第一部分：Token 流
-./compiler --dump-ast < input.tc           # 第二部分：AST
-./compiler --dump-symtab < input.tc        # 选做：符号表
+./compiler --check-ast   < input.tc           # 第二部分：AST 检查
 ./compiler --dump-ir < input.tc            # 第三部分：LLVM IR
 ./compiler --dump-ir --opt < input.tc      # 第三部分：优化后 LLVM IR
 ./compiler --dump-asm < input.tc > out.s   # 第四部分：基线汇编
