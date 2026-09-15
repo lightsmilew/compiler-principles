@@ -23,7 +23,7 @@ ToyC/
 
 ## 二、模板文件
 
-仓库提供可直接下载的 [group.json 模板](https://raw.githubusercontent.com/lightsmilew/compiler-principles/main/static/templates/group.json)。下载后复制到项目根目录：
+仓库提供可直接下载的 <a href="/compiler-principles/templates/group.json" download="group.json">group.json 模板</a>。下载后复制到项目根目录：
 
 ```bash
 curl -L -o group.json https://<course-site>/<base>/templates/group.json
@@ -68,7 +68,7 @@ curl -L -o group.json https://<course-site>/<base>/templates/group.json
 
 `libtoyc.a` 不属于学生项目的必需提交文件。课程组提供完整的静态库下载资源：
 
-- [下载 ToyC RV64GC 运行时库 libtoyc.a](https://raw.githubusercontent.com/lightsmilew/compiler-principles/main/static/downloads/libtoyc.a)
+- <a href="/compiler-principles/downloads/libtoyc.a" download="libtoyc.a">下载 ToyC RV64GC 运行时库 libtoyc.a</a>
 - [运行时库接口说明](../reference/sysy-runtime.md)
 
 下载后放到本地工作目录，例如：
