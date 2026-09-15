@@ -135,7 +135,7 @@ tensor int C[2][2] = A @ B;
 
 | 队伍 | 学校 | 备注 |
 | --- | --- | --- |
-| [不队](github.com/AdUhTkJm/sysy-competition) | 剑桥大学 | 2025 年编译系统赛 RISC-V 特等奖|
+| [不队](https://github.com/AdUhTkJm/sysy-competition) | 剑桥大学 | 2025 年编译系统赛 RISC-V 特等奖|
 | [0x676e616c63](https://gitlab.eduxiji.net/T202510614205710/gnalc) | 电子科技大学 | 2025 年编译系统赛 ARM 特等奖 |
 
 ### 6.1 初赛优化建议（参考）
