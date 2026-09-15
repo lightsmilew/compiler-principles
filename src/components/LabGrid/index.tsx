@@ -94,7 +94,7 @@ export default function LabGrid(): ReactNode {
           const rad = (angle * Math.PI) / 180;
           const x = Math.cos(rad);
           const y = Math.sin(rad);
-          const slotStyle: CSSProperties = {
+          const slotStyle: CSSProperties & Record<`--${string}`, string> = {
             '--x': x.toFixed(4),
             '--y': y.toFixed(4),
           };
