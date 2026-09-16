@@ -139,8 +139,8 @@ AST 应丢弃不影响语义的括号和分隔符，但保留源位置，便于�
 ```bash
 cmake -S . -B build
 cmake --build build
-./compiler --check-ast < tests/precedence.tc
-./compiler --check-ast --parser ll1 < tests/precedence.tc
+./compiler --check-ast < input.c > input.check-ast
+./compiler --check-ast --parser ll1 < input.c > input.check-ast
 ```
 
 报告需包含：文法改写、FIRST/FOLLOW 集、分析表或递归下降实现、AST 节点设计、错误恢复策略和测试结果。测试应覆盖优先级、结合性、嵌套语句、函数调用和非法输入。

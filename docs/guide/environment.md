@@ -169,27 +169,29 @@ qemu-riscv64 --version
 
 ```bash
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
-  -nostdlib -static out.s -o out.elf
-qemu-riscv64 ./out.elf
+  -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
+printf '42\n' | qemu-riscv64 ./input > input.out
 ```
 
 若课程组提供的是 Linux 目标库，则使用课程指定的 `riscv64-unknown-linux-gnu-*` 工具链和 ABI；不要把 RV32 库与 RV64 汇编混合链接。运行时库使用课程组提供的 `libtoyc.a`，编译器需要为 `getint()` 和 `putint(int)` 生成外部调用，并在最终链接时加入该库。
 
 ### 4. QEMU 启动与标准输入
 
-编译器本身从标准输入读取 ToyC 源代码，生成汇编到标准输出。**可执行文件统一命名为 `compiler`**：
+编译器本身从标准输入读取 ToyC 源代码，生成汇编到标准输出。**可执行文件统一命名为 `compiler`**。建议把 ToyC 源文件命名为 `*.c`，把运行时数据命名为 `*.in`，把汇编命名为 `*.s`，把链接后的可执行文件命名为无后缀名（如 `input`），把程序运行后的标准输出命名为 `*.out`，与助教评测脚本约定保持一致：
 
 ```bash
-./compiler < test.c > test.s
+./compiler < input.c > input.s
 ```
 
 链接后，使用 QEMU 运行 RV64 程序，并把测试数据传给被编译程序的标准输入：
 
 ```bash
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
-  -nostdlib -static test.s libtoyc.a -o test.elf
-printf '42\n' | qemu-riscv64 ./test.elf
+  -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
+printf '42\n' | qemu-riscv64 ./input > input.out
 ```
+
+> **`*.c` vs `*.in` vs `*.out`**：`*.c` 是 ToyC 源文件，由**编译器**读取；`*.in` 是 ToyC 程序运行时的标准输入数据（例如 `getint()` 要读取的数字），由**被编译出的可执行文件**读取；`*.out` 是 ToyC 程序运行时的标准输出结果（例如 `putint()` 写入的内容），是助教评测时实际比对的文件。三者不要混淆。
 
 QEMU 用户态模式适合运行单个 RV64 Linux/静态 ELF；如果课程环境要求完整虚拟机，再使用 `qemu-system-riscv64` 配合课程提供的内核、设备树和磁盘镜像，不能只凭一个裸 ELF 启动完整系统。
 
@@ -198,7 +200,7 @@ QEMU 用户态模式适合运行单个 RV64 Linux/静态 ELF；如果课程环�
 编译器应接受可选参数 `-opt`：
 
 ```bash
-./compiler -opt < test.c > optimized.s
+./compiler -opt < input.c > input.opt.s
 ```
 
 未提供 `-opt` 时优先保证功能正确；提供 `-opt` 时可以启用常量折叠、局部死代码消除和表达式简化，也可以暂时忽略该参数。两种模式都必须输出合法的 RV64GC 汇编。
@@ -260,19 +262,16 @@ curl -L -o third_party/docs/Sysy2026.pdf \
 在正式动手前，请先确保下面的命令能跑通，这证明你的工具链是完整的：
 
 ```bash
-# 1. 确认编译器可用
-g++ --version
-
-# 2. 编译并运行一个最小程序
-cat > hello.mc <<'EOF'
+# 1. 编译并运行一个最小程序
+cat > hello.c <<'EOF'
 int main() {
   return 0;
 }
 EOF
 
-# 3. 用统一驱动处理它（实验一之后应能输出 Token 流）
+# 2. 用统一驱动处理它（实验一之后应能输出 Token 流）
 #    可执行文件统一叫 compiler，仓库目录名由你自取
-./compiler --dump-tokens < hello.mc
+./compiler --dump-tokens < hello.c > hello.token
 ```
 
 如果能正常输出 Token 流而程序不崩溃，环境即准备完成。

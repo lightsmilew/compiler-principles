@@ -54,9 +54,22 @@ curl -L -o group.csv "${SITE_BASE_URL:-http://localhost:3000}/compiler-principle
 最常用的两种调用：
 
 ```bash
-./compiler --dump-asm < test.c > test.s          # 基线汇编
-./compiler --dump-asm -opt < test.c > optimized.s  # 含基础优化
+./compiler --dump-asm < input.c > input.s          # 基线汇编
+./compiler --dump-asm -opt < input.c > input.opt.s # 含基础优化
 ```
+
+> **测试文件命名约定**：助教评测时按以下格式提供测试文件与输出文件，学生自测时也建议遵循同样命名，便于和助教脚本对账：
+>
+> | 阶段 | 编译器输入 | 程序运行时输入 | 链接产物 | 程序输出 |
+> |---|---|---|---|---|
+> | 第一部分（词法） | `*.c` | — | — | `*.token` |
+> | 第二部分（语法） | `*.c` | — | — | `*.check-ast` |
+> | 第三部分（IR） | `*.c` | — | — | `*.ll` / `*.opt.ll` |
+> | 第四部分（汇编） | `*.c` | `*.in` | `input`（无后缀 ELF） | `*.out` |
+>
+> **完整流程**：你的 `./compiler` 读 `*.c` → 输出汇编 `*.s` → `riscv64-unknown-elf-gcc` 链接 `*.s` 与 `libtoyc.a` → 生成可执行文件（无后缀，如 `input`）→ 运行可执行文件，把 stdout 重定向到 `*.out`，这是助教评测脚本实际比对的文件。
+>
+> `*.c` 是 ToyC 源文件，`*.in` 是 ToyC 程序运行时的标准输入数据（例如 `getint()` 读取的内容），`*.out` 是 ToyC 程序的标准输出结果（例如 `putint()` 写入的内容）。三者不要混淆。
 
 没有 `-opt` 时保证功能正确；有 `-opt` 时可以启用基础优化，也可以忽略该参数。诊断信息写到标准错误，成功返回 0，输入错误返回非零值。
 
@@ -80,7 +93,8 @@ curl -L -o third_party/toyc/libtoyc.a "${SITE_BASE_URL:-http://localhost:3000}/c
 
 ```bash
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
-   -nostdlib -static output.s third_party/toyc/libtoyc.a -o output.elf
+   -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
+./input < runtime.in > input.out
 ```
 
 不要把库文件复制进学生仓库，也不要自行重新编译替换评测库；以课程组发布的完整文件和校验值为准。
@@ -120,10 +134,10 @@ git status --short
 git grep -n -E 'token|ghp_|glpat-|password' -- ':!*.md'
 
 # 确认 RV64GC 输出和标准输入
-./your_compiler < tests/hello.c > /tmp/hello.s
+./compiler < input.c > /tmp/input.s
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
-  -nostdlib -static /tmp/hello.s libtoyc.a -o /tmp/hello.elf
-qemu-riscv64 /tmp/hello.elf
+  -nostdlib -static /tmp/input.s third_party/toyc/libtoyc.a -o /tmp/input
+/tmp/input < /tmp/runtime.in > /tmp/input.out   # input.out 是 ToyC 程序 stdout
 ```
 
 平台提交后应记录提交时间、仓库地址、分支和提交哈希，便于出现构建问题时定位具体版本。

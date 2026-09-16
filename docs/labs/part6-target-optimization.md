@@ -116,25 +116,25 @@ while changed:
 ```bash
 cmake -S . -B build
 cmake --build build
-./compiler --dump-asm < input.tc > baseline.s
-./compiler --dump-asm -opt < input.tc > optimized.s
+./compiler --dump-asm < input.c > input.s
+./compiler --dump-asm -opt < input.c > input.opt.s
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
-  -nostdlib -static optimized.s libtoyc.a -o out.elf
-./out < input.txt
+  -nostdlib -static input.opt.s third_party/toyc/libtoyc.a -o input
+./input < runtime.in > input.out
 ```
 
 第六部分必须提交可编译的完整文件：
 
 ```text
-part6-target-optimization/
+toyc-cpp/           # 仓库目录名由你决定，此处以 toyc-cpp 为例
+├── CMakeLists.txt
 ├── src/
-├── tests/
-├── build.sh
+├── third_party/toyc/libtoyc.a
 ├── README.md
-└── report.md
+└── group.csv
 ```
 
-报告必须包含活跃区间、冲突图、寄存器分配、spill 统计、窥孔规则、指令数对比和优化前后运行结果。
+`README.md` 必须包含活跃区间分析、冲突图、寄存器分配算法描述、spill 统计、窥孔优化规则和优化前后运行结果对比。
 
 ## 六、本部分优化项速查
 

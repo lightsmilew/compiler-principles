@@ -599,32 +599,27 @@ codegen_instr(instr):
 ```bash
 cmake -S . -B build
 cmake --build build
-./compiler --dump-asm < input.tc > out.s
+./compiler --dump-asm < input.c > input.s
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
-  -nostdlib -static out.s third_party/toyc/libtoyc.a -o out.elf
-./out.elf < input.txt
+  -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
+./input < runtime.in > input.out
 ```
 
 必须提交可编译的完整文件：
 
 ```text
-part4-codegen/
+toyc-cpp/           # 仓库目录名由你决定，此处以 toyc-cpp 为例
+├── CMakeLists.txt
 ├── src/
 │    ├── asm_backend.cpp    # 主要后端逻辑
 │    ├── frame_layout.cpp   # 栈帧布局
 │    ├── instruction_sel.cpp # 指令选择
 │    └── riscv_abi.cpp      # 调用约定
-├── tests/
-├── build.sh
+├── third_party/toyc/libtoyc.a
 ├── README.md
-└── report.md
+└── group.csv
 ```
 
-`report.md` 应包含：
-1. 指令选择表：每类 LLVM IR → RISC-V 指令的映射关系
-2. `phi` 消除策略和具体实现步骤
-3. 参数传递：寄存器分配和栈溢出的处理方式
-4. 栈帧布局：各区域的偏移量计算方式
-5. 基线测试结果：至少 5 个测试用例的汇编输出
+`README.md` 应包含指令选择表、phi 消除策略、参数传递方式、栈帧布局和基线测试结果。基线测试应包含至少 5 个测试用例的汇编输出。
 
 寄存器分配改进和窥孔优化放到第六部分。

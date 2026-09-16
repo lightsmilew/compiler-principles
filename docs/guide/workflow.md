@@ -92,12 +92,18 @@ error: line 12, column 5: unexpected character '@'
 统一驱动使用原实验约定的 `--dump-*` 开关，并从标准输入读取 ToyC 源程序、向标准输出写入阶段结果：
 
 ```bash
-./compiler --dump-tokens < input.tc          # 第一部分：Token 流
-./compiler --check-ast   < input.tc           # 第二部分：AST 检查
-./compiler --dump-ir < input.tc            # 第三部分：LLVM IR
-./compiler --dump-ir --opt < input.tc      # 第三部分：优化后 LLVM IR
-./compiler --dump-asm < input.tc > out.s   # 第四部分：基线汇编
-./compiler --dump-asm -opt < input.tc > opt.s  # 第五、六部分：优化汇编
+./compiler --dump-tokens < input.c          # 第一部分：Token 流（建议输出 input.token）
+./compiler --check-ast   < input.c          # 第二部分：AST 检查（建议输出 input.check-ast）
+./compiler --dump-ir < input.c              # 第三部分：LLVM IR（建议输出 input.ll）
+./compiler --dump-ir --opt < input.c        # 第三部分：优化后 LLVM IR（建议输出 input.opt.ll）
+./compiler --dump-asm < input.c > input.s   # 第四部分：基线汇编
+./compiler --dump-asm -opt < input.c > input.opt.s  # 第五、六部分：优化汇编
+
+# 链接 ToyC 运行时库并运行
+riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
+  -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
+./input < runtime.in > input.out      # runtime.in 为 ToyC 程序运行时的 stdin 数据
+                                       # input.out 是 ToyC 程序 stdout，是评测对比对象
 ```
 
 `--dump-*` 模式用于检查中间结果；最终评测重点是 `--dump-asm` 产生的 RV64GC 汇编及其运行结果。

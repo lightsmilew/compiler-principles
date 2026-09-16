@@ -172,15 +172,17 @@ cost = Σ (load_count + store_count) × frequency_of_block
 
 ```bash
 # 1. 查看汇编中 lw/sw 数量
-./compiler --dump-asm -opt < input.tc | grep -c "lw\|sw"
+./compiler --dump-asm -opt < input.c > input.opt.s
+grep -c "lw\|sw" input.opt.s
 
 # 2. 对比无优化版本
-./compiler --dump-asm < input.tc | grep -c "lw\|sw"
+./compiler --dump-asm < input.c > input.s
+grep -c "lw\|sw" input.s
 
 # 3. 输出每条 spill 的位置
-./compiler --dump-asm -opt --debug-spill < input.tc > after.s
+./compiler --dump-asm -opt --debug-spill < input.c > input.debug.s
 ```
 
-如果 `after.s` 比 `before.s` 多很多 `lw/sw`，说明分配器选择 spill 不当，可能要重新设计活跃区间或升级到图着色。
+如果 `input.opt.s` 的 `lw/sw` 数显著多于 `input.s`，说明分配器选择 spill 不当，可能要重新设计活跃区间或升级到图着色。
 
 下一步阅读：[窥孔优化](asm-peephole)。

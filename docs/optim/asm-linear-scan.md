@@ -169,15 +169,15 @@ public:
 ## 七、测试
 
 ```bash
-./compiler --dump-asm        < input.tc > before.s     # 不优化
-./compiler --dump-asm -opt   < input.tc > after.s      # 含寄存器分配
-diff before.s after.s                                     # 观察寄存器替换与 spill
+./compiler --dump-asm        < input.c > input.s       # 不优化
+./compiler --dump-asm -opt   < input.c > input.opt.s   # 含寄存器分配
+diff input.s input.opt.s                               # 观察寄存器替换与 spill
 
 # 统计寄存器使用
-grep -c "lw\|sw" before.s
-grep -c "lw\|sw" after.s
+grep -c "lw\|sw" input.s
+grep -c "lw\|sw" input.opt.s
 ```
 
-如果 `after.s` 的 `lw/sw` 数显著多于 `before.s`，说明 spill 偏多，可能要换更优的活跃区间构建策略，或者减少活跃区间数量（缩短跨调用活跃）。
+如果 `input.opt.s` 的 `lw/sw` 数显著多于 `input.s`，说明 spill 偏多，可能要换更优的活跃区间构建策略，或者减少活跃区间数量（缩短跨调用活跃）。
 
 下一步阅读：[图着色寄存器分配](asm-graph-coloring) 或 [Spill / Reload](asm-spill)。

@@ -98,15 +98,16 @@ scan_token():
 ```bash
 cmake -S . -B build
 cmake --build build
-./compiler --dump-tokens < tests/basic.tc > tokens.txt
+./compiler --dump-tokens < input.c > input.token
 ```
 
 ```text
-part1-lexer/
+toyc-cpp/           # 仓库目录名由你决定，此处以 toyc-cpp 为例
+├── CMakeLists.txt   # 或 Makefile / pom.xml / dune-project
 ├── src/
-├── tests/
-├── build.sh
-└── report.md
+├── third_party/toyc/libtoyc.a   # 评测平台提供
+├── README.md
+└── group.csv
 ```
 
-报告应包含正则规则、DFA 状态图、Token 数据结构、错误恢复策略和测试结果。
+报告中应包含正则规则、DFA 状态图、Token 数据结构、错误恢复策略和自测结果。

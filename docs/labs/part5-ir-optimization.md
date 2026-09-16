@@ -86,10 +86,10 @@ ret i32 20
 ```bash
 cmake -S . -B build
 cmake --build build
-./compiler --dump-ir < input.tc > before.ll
-./compiler --dump-ir --opt < input.tc > after.ll
-./compiler --dump-asm < input.tc > before.s
-./compiler --dump-asm -opt < input.tc > after.s
+./compiler --dump-ir < input.c > input.ll
+./compiler --dump-ir --opt < input.c > input.opt.ll
+./compiler --dump-asm < input.c > input.s
+./compiler --dump-asm -opt < input.c > input.opt.s
 ```
 
 分别链接并运行两个版本，比较输出和退出码；同时报告 IR 指令数、基本块数和优化前后差异。
@@ -99,15 +99,15 @@ cmake --build build
 第五部分必须提交可编译的完整优化器文件：
 
 ```text
-part5-ir-optimization/
+toyc-cpp/           # 仓库目录名由你决定，此处以 toyc-cpp 为例
+├── CMakeLists.txt
 ├── src/
-├── tests/
-├── build.sh
+├── third_party/toyc/libtoyc.a
 ├── README.md
-└── report.md
+└── group.csv
 ```
 
-`README.md` 需要说明 LLVM IR 输入输出、优化等级和命令行参数；`report.md` 需要包含 CFG、Use-Def、数据流方程、优化规则、正确性证明思路和测试结果。
+`README.md` 需要说明 LLVM IR 输入输出格式、优化等级和命令行参数。
 
 ## 五、本部分优化项速查
 

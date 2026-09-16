@@ -181,13 +181,17 @@ return sum;
 EOF
 
 # 对比无优化 vs 有强度削减的指令数
-./compiler --dump-asm        < loop.c > before.s
-./compiler --dump-asm -opt   < loop.c > after.s
-diff before.s after.s
+./compiler --dump-asm        < loop.c > loop.s
+./compiler --dump-asm -opt   < loop.c > loop.opt.s
+diff loop.s loop.opt.s
 
 # 比较运行时间
-time qemu-riscv64 before.elf
-time qemu-riscv64 after.elf
+riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
+  -nostdlib -static loop.s     third_party/toyc/libtoyc.a -o loop
+riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
+  -nostdlib -static loop.opt.s third_party/toyc/libtoyc.a -o loop.opt
+time qemu-riscv64 loop     < runtime.in > loop.out
+time qemu-riscv64 loop.opt < runtime.in > loop.opt.out
 ```
 
 回到：[目标代码优化总览](../labs/part6-target-optimization)。

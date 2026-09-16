@@ -33,9 +33,10 @@ int main() {
 目标代码必须是 RISC-V64GC，并使用 ToyC 运行时库进行静态链接：
 
 ```bash
-./compiler input.sy -o out.s
+./compiler < input.c > input.s
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
-  -nostdlib -static out.s libtoyc.a -o out.elf
+  -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
+./input < runtime.in > input.out
 ```
 
 `getint` 的返回值从 `a0` 读取，`putint` 的第一个参数放入 `a0`。除参数和

@@ -105,12 +105,60 @@ flowchart LR
 > **提交时机**：源码与设计文档按实验部分随 Git 仓库迭代提交；实验报告与汇报 PPT 在结课时统一提交。
 > **严禁**：构建产物（`a.out`、`*.class`、`*.o`）、IDE 配置目录、`libtoyc.a`、绝对路径与本地缓存；评测平台另行规定的除外。
 
-## 五、统一驱动接口
+## 五、测试文件命名约定
+
+评测时助教提供的测试文件按以下约定命名，学生在自己的验证命令中也应遵循同样格式：
+
+| 阶段 | 编译器输入 | 程序运行时输入 | 链接产物 | 程序输出 |
+|---|---|---|---|---|
+| 第一部分（词法） | `*.c` | — | — | `*.token` |
+| 第二部分（语法） | `*.c` | — | — | `*.check-ast` |
+| 第三部分（IR） | `*.c` | — | — | `*.ll` / `*.opt.ll` |
+| 第四部分（汇编） | `*.c` | `*.in` | `input`（无后缀） | `*.out` |
+
+> **关于源文件命名**：ToyC 源文件统一使用 `.c` 后缀（与 C 语言一致，便于工具链识别）。编译流程是**两步**：
+>
+> 1. 你的 `./compiler` 把 `*.c` 转成 RV64GC 汇编 `*.s`；
+> 2. 用 `riscv64-unknown-elf-gcc` 链接 `*.s` 与运行时库，生成一个 **无后缀的可执行文件**（直接叫 `input`），再用 `qemu-riscv64` 运行它；
+> 3. 运行结果（ToyC 程序的 stdout）重定向到 `*.out`，这是助教用来与标准答案对比的文件。
+>
+> 示例：
+
+```bash
+./compiler --dump-asm < input.c > input.s
+riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
+  -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
+./input < runtime.in > input.out        # input.out 是 ToyC 程序的 stdout，是评测对比对象
+```
+
+> **`*.c` vs `*.in` vs `*.out` 三者不要混淆**：
+> - `*.c` — ToyC 源文件，由**编译器**从 stdin 读取；
+> - `*.in` — ToyC 程序运行时的标准输入数据（例如 `getint()` 要读取的数字），由**被编译出的可执行文件**从 stdin 读取；
+> - `*.out` — ToyC 程序运行时的**标准输出结果**（例如 `putint()` 写入的内容），是助教评测脚本实际比对的文件。
+
+示例（第一部分，词法）：
+
+```bash
+./compiler --dump-tokens < input.c > input.token
+```
+
+示例（第四部分，汇编链接与运行）：
+
+```bash
+./compiler --dump-asm < input.c > input.s
+riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
+  -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
+./input < runtime.in > input.out        # input.out 是 ToyC 程序 stdout，是评测对比对象
+```
+
+> **注意**：`*.c` 是 ToyC 源文件（编译器输入），`*.in` 是程序运行时的标准输入数据，`*.out` 是程序的标准输出结果（即助教评测时实际比对的输出），三者不要混淆。
+
+## 六、统一驱动接口
 
 课程组要求的命令行接口（必须全部支持）：
 
 ```bash
-./compiler [选项] <源文件>
+./compiler [选项] < input.c
 
 选项：
   --dump-tokens    输出词法单元流
@@ -127,14 +175,14 @@ flowchart LR
 `--dump-ir`、`--dump-ir --opt` 与 `-o` 属于自调试可选接口，方便你在本地观察中间结果或指定输出文件，测评脚本不会调用，无需严格对齐名称。
 :::
 
-## 六、验收流程
+## 七、验收流程
 
 ```mermaid
 sequenceDiagram
   participant S as 学生
   participant T as 助教
   S->>T: 提交仓库与 PR
-  T->>T: 自动测试脚本跑 30 个用例
+  T->>T: 自动测试脚本跑用例（比对 .token / .check-ast / .out）
   T->>S: 现场随机抽取用例
   S->>T: 现场编译并运行展示
   T->>S: 助教提问：相关原理与实现细节
@@ -155,7 +203,7 @@ sequenceDiagram
 
 > 提问不限于以上范围，助教可能就任意模块的设计取舍、数据结构选择或调试经验追问，请提前熟悉自己提交的代码。
 
-## 七、时间安排
+## 八、时间安排
 
 | 周次 | 里程碑 | 交付 |
 | --- | --- | --- |
@@ -165,14 +213,14 @@ sequenceDiagram
 | 第 15 周 | 测试完善 | 30 个用例全部通过，文档初稿 |
 | 第 16 周 | 答辩 | 幻灯片 + 现场演示 |
 
-## 八、加分项
+## 九、加分项
 
 1. 实现完整的**图着色寄存器分配**并给出与线性扫描的对比数据；
 2. 支持**自定义扩展语言特性**（如 `struct` 嵌套、多维数组），并有测试覆盖；
 3. 提供 **Web 版编译器演示**（浏览器内编译并展示各阶段产物）；
 4. 单元测试覆盖率 ≥ 70%，并接入 CI 自动运行。
 
-## 九、常见扣分点
+## 十、常见扣分点
 
 - 编译器遇到非法输入直接崩溃，而不是给出错误信息；
 - 统一驱动接口参数名不一致，导致自动测试无法调用；
