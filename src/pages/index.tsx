@@ -7,18 +7,6 @@ import LabGrid from '@site/src/components/LabGrid';
 import styles from './index.module.css';
 
 /* ==========================================================================
-   编译流程：六阶段
-   ========================================================================== */
-const pipeline = [
-  {label: '词法分析', detail: '字符流 → Token 流'},
-  {label: '语法分析', detail: 'Token 流 → AST'},
-  {label: '语义分析与 IR 生成', detail: 'AST → LLVM IR'},
-  {label: 'IR 优化', detail: '常量传播、死代码消除'},
-  {label: '目标代码生成', detail: 'IR → RISC-V 汇编'},
-  {label: '目标代码优化', detail: '寄存器分配、窥孔优化'},
-];
-
-/* ==========================================================================
    Hero
    ========================================================================== */
 function Hero() {
@@ -30,31 +18,9 @@ function Hero() {
             编译原理实验
           </Heading>
           <p className={styles.subtitle}>
-            以一门公共语言 <strong>ToyC</strong> 为主线，从词法分析一路做到目标代码生成。
+            以一门语言 <strong>ToyC</strong> 为主线，从词法分析一路做到目标代码生成。
             六个递进式实验，最终得到一个完整、可运行的编译器。
           </p>
-          {/* 编译流程条：左右标签 + 六个阶段节点 */}
-          <div className={styles.pipelineWrap} role="list" aria-label="编译流程">
-            <span className={styles.pipelineEnd} aria-label="输入">
-              <span className={styles.pipelineEndTag}>ToyC</span>
-            </span>
-            <span className={styles.pipelineLine} aria-hidden="true" />
-            {pipeline.map((stage, i) => (
-              <span
-                key={stage.label}
-                className={styles.pipelineNode}
-                role="listitem"
-                aria-label={stage.label}>
-                <span className={styles.pipelineNodeNum}>{String(i + 1).padStart(2, '0')}</span>
-                <span className={styles.pipelineNodeLabel}>{stage.label}</span>
-                <span className={styles.pipelineNodeDetail}>{stage.detail}</span>
-              </span>
-            ))}
-            <span className={styles.pipelineLine} aria-hidden="true" />
-            <span className={styles.pipelineEnd} aria-label="输出">
-              <span className={styles.pipelineEndTag}>ELF</span>
-            </span>
-          </div>
           <div className={styles.actions}>
             <Link className={styles.btnPrimary} to="/docs/labs/part1-lexer">
               开始第一部分
@@ -70,7 +36,7 @@ function Hero() {
 }
 
 /* ==========================================================================
-   实验内容：七张卡片
+   实验内容：垂直时间线
    ========================================================================== */
 function LabsSection() {
   return (
@@ -85,37 +51,6 @@ function LabsSection() {
           </p>
         </div>
         <LabGrid />
-      </div>
-    </section>
-  );
-}
-
-/* ==========================================================================
-   编译流程图：六阶段
-   ========================================================================== */
-function PipelineSection() {
-  return (
-    <section className={`${styles.section} ${styles.sectionAlt}`}>
-      <div className="container">
-        <div className={styles.sectionHead}>
-          <Heading as="h2" className={styles.sectionTitle}>
-            实验覆盖编译全流程
-          </Heading>
-          <p className={styles.sectionDesc}>
-            六个实验环环相扣，每个阶段的产物都是下一个阶段的输入。
-          </p>
-        </div>
-        <div className={styles.pipelineGrid}>
-          {pipeline.map((stage, i) => (
-            <div key={stage.label} className={styles.pipelineCard}>
-              <span className={styles.pipelineNum}>{String(i + 1).padStart(2, '0')}</span>
-              <div className={styles.pipelineInfo}>
-                <p className={styles.pipelineLabel}>{stage.label}</p>
-                <p className={styles.pipelineDetail}>{stage.detail}</p>
-              </div>
-            </div>
-          ))}
-        </div>
       </div>
     </section>
   );
@@ -177,10 +112,10 @@ function QuickStart() {
               {'\n\n'}
               <span className={styles.codeComment}>{'# '}</span>
               <span className={styles.codePrompt}>分阶段输出</span>
-              {'\n'}./compiler --dump-tokens input.tc
-              {'\n'}./compiler --dump-ast input.tc
-              {'\n'}./compiler --dump-ir input.tc
-              {'\n'}./compiler --dump-asm input.tc
+              {'\n'}./compiler --dump-tokens input.c
+              {'\n'}./compiler --dump-ast input.c
+              {'\n'}./compiler --dump-ir input.c
+              {'\n'}./compiler --dump-asm input.c
               {'\n\n'}
               <span className={styles.codeComment}>{'# '}</span>
               <span className={styles.codePrompt}>运行生成的汇编</span>
@@ -205,7 +140,7 @@ function CTA() {
         <div className={styles.cta}>
           <div>
             <Heading as="h3" className={styles.ctaTitle}>
-              先看公共语言与文法约定
+              先看语言与文法约定
             </Heading>
             <p className={styles.ctaText}>
               ToyC 的词法规则、上下文无关文法与各阶段标准输出格式，是全部实验的唯一依据。
@@ -234,7 +169,6 @@ export default function Home(): ReactNode {
           <QuickStart />
         </div>
       </section>
-      <PipelineSection />
       <CTA />
     </Layout>
   );

@@ -16,6 +16,11 @@ const sidebars: SidebarsConfig = {
     'labs/capstone',
     {
       type: 'category',
+      label: '实验指南',
+      items: ['guide/environment', 'guide/workflow', 'guide/report', 'guide/submission'],
+    },
+    {
+      type: 'category',
       label: '实验部分',
       items: [
         'labs/part1-lexer',
@@ -64,13 +69,8 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
-      label: '实验指南',
-      items: ['guide/environment', 'guide/workflow', 'guide/report', 'guide/submission'],
-    },
-    {
-      type: 'category',
       label: '参考资料',
-      items: ['reference/grammar', 'reference/llvm-mlir', 'reference/sysy-runtime', 'reference/faq'],
+      items: ['reference/grammar', 'reference/llvm-mlir', 'reference/toyc-runtime', 'reference/faq'],
     },
   ],
 };

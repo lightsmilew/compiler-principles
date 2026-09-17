@@ -93,7 +93,9 @@ br i1 %cmp, label %then, label %else
     j     .Lelse
 ```
 
-> **注**：RISC-V 的 `blt`/`bge` 等是"先比较、后跳转"，效果等同于"先执行 icmp，再 br i1"。如果 `icmp` 的结果只用于条件跳转，则比较结果无需存入寄存器。
+:::info
+RISC-V 的 `blt`/`bge` 等是"先比较、后跳转"，效果等同于"先执行 icmp，再 br i1"。如果 `icmp` 的结果只用于条件跳转，则比较结果无需存入寄存器。
+:::
 
 **方案 B（翻译为 set 指令）**：如果 `icmp` 结果需要存入变量：
 

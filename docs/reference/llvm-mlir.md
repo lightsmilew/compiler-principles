@@ -7,7 +7,9 @@ description: 中间表示的结构、ToyC 编译器中的使用方式以及两�
 
 # LLVM IR 与 MLIR 参考
 
-> **工程约束**：ToyC 编译器全程禁止引入任何第三方运行时库，包括 LLVM、MLIR 以及其他编译器基础设施。LLVM IR 与 MLIR 仅作为参考架构，用于理解 SSA 设计、`phi` 语义、多阶段 lowering 等思想。词法与语法分析阶段允许使用工具生成代码骨架（例如基于 Flex/Bison 的实现），但 IR 生成、优化、目标代码生成都必须自行完成。课程项目的 IR 实现推荐自定义三地址码。
+:::caution[工程约束]
+ToyC 编译器全程禁止引入任何第三方运行时库，包括 LLVM、MLIR 以及其他编译器基础设施。LLVM IR 与 MLIR 仅作为参考架构，用于理解 SSA 设计、`phi` 语义、多阶段 lowering 等思想。词法与语法分析阶段允许使用工具生成代码骨架（例如基于 Flex/Bison 的实现），但 IR 生成、优化、目标代码生成都必须自行完成。课程项目的 IR 实现推荐自定义三地址码。
+:::
 
 第三部分的 IR 设计建议使用自定义三地址码，必要时可参考 LLVM IR 与 MLIR 的设计理念。本页用于在开始第三部分前建立共同概念。
 
@@ -15,7 +17,9 @@ description: 中间表示的结构、ToyC 编译器中的使用方式以及两�
 
 LLVM IR 是一种强类型 SSA 三地址码：每条指令最多一个算术结果，可以有 0 个或多个操作数；它同时是编译器内部表示和文本格式（`.ll`），用 `llvm-as` / `llvm-dis` 可以双向转换。
 
-> LLVM IR 仅作为 ToyC IR 设计的参考架构，课程项目禁止集成 LLVM 库。学生应参考 LLVM IR 的 SSA 组织形式、`phi` 节点语义、内存模型（alloca/load/store）和 calling convention，自行决定三地址码的结构。
+:::info
+LLVM IR 仅作为 ToyC IR 设计的参考架构，课程项目禁止集成 LLVM 库。学生应参考 LLVM IR 的 SSA 组织形式、`phi` 节点语义、内存模型（alloca/load/store）和 calling convention，自行决定三地址码的结构。
+:::
 
 ### 1.1 层级结构
 

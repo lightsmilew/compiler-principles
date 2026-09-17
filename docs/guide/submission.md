@@ -58,18 +58,20 @@ curl -L -o group.csv "${SITE_BASE_URL:-http://localhost:3000}/compiler-principle
 ./compiler --dump-asm -opt < input.c > input.opt.s # 含基础优化
 ```
 
-> **测试文件命名约定**：助教评测时按以下格式提供测试文件与输出文件，学生自测时也建议遵循同样命名，便于和助教脚本对账：
->
-> | 阶段 | 编译器输入 | 程序运行时输入 | 链接产物 | 程序输出 |
-> |---|---|---|---|---|
-> | 第一部分（词法） | `*.c` | — | — | `*.token` |
-> | 第二部分（语法） | `*.c` | — | — | `*.check-ast` |
-> | 第三部分（IR） | `*.c` | — | — | `*.ll` / `*.opt.ll` |
-> | 第四部分（汇编） | `*.c` | `*.in` | `input`（无后缀 ELF） | `*.out` |
->
-> **完整流程**：你的 `./compiler` 读 `*.c` → 输出汇编 `*.s` → `riscv64-unknown-elf-gcc` 链接 `*.s` 与 `libtoyc.a` → 生成可执行文件（无后缀，如 `input`）→ 运行可执行文件，把 stdout 重定向到 `*.out`，这是助教评测脚本实际比对的文件。
->
-> `*.c` 是 ToyC 源文件，`*.in` 是 ToyC 程序运行时的标准输入数据（例如 `getint()` 读取的内容），`*.out` 是 ToyC 程序的标准输出结果（例如 `putint()` 写入的内容）。三者不要混淆。
+:::info[测试文件命名约定]
+助教评测时按以下格式提供测试文件与输出文件，学生自测时也建议遵循同样命名，便于和助教脚本对账：
+
+| 阶段 | 编译器输入 | 程序运行时输入 | 链接产物 | 程序输出 |
+|---|---|---|---|---|
+| 第一部分（词法） | `*.c` | — | — | `*.token` |
+| 第二部分（语法） | `*.c` | — | — | `*.check-ast` |
+| 第三部分（IR） | `*.c` | — | — | `*.ll` / `*.opt.ll` |
+| 第四部分（汇编） | `*.c` | `*.in` | `input`（无后缀 ELF） | `*.out` |
+
+**完整流程**：你的 `./compiler` 读 `*.c` → 输出汇编 `*.s` → `riscv64-unknown-elf-gcc` 链接 `*.s` 与 `libtoyc.a` → 生成可执行文件（无后缀，如 `input`）→ 运行可执行文件，把 stdout 重定向到 `*.out`，这是助教评测脚本实际比对的文件。
+
+`*.c` 是 ToyC 源文件，`*.in` 是 ToyC 程序运行时的标准输入数据（例如 `getint()` 读取的内容），`*.out` 是 ToyC 程序的标准输出结果（例如 `putint()` 写入的内容）。三者不要混淆。
+:::
 
 没有 `-opt` 时保证功能正确；有 `-opt` 时可以启用基础优化，也可以忽略该参数。诊断信息写到标准错误，成功返回 0，输入错误返回非零值。
 
@@ -80,7 +82,7 @@ curl -L -o group.csv "${SITE_BASE_URL:-http://localhost:3000}/compiler-principle
 `libtoyc.a` 由希冀评测平台统一提供，学生无需上传到仓库。课程组也提供本地下载链接供本地调试使用：
 
 - [下载 ToyC RV64GC 运行时库 libtoyc.a](pathname:///downloads/libtoyc.a)
-- [运行时库接口说明](../reference/sysy-runtime)
+- [运行时库接口说明](../reference/toyc-runtime)
 
 下载后放到本地工作目录，例如：
 

@@ -1,197 +1,372 @@
 /* ==========================================================================
-   扇形布局：7 张卡片以 ToyC 圆心为中心，均匀分布在 360° 圆周上
-   实现：
-   - 容器正中是 center hub
-   - 每个插槽用 calc(var(--x)/var(--y) × radius) 定位到圆周对应点
-   - 用 transform: translate(-50%, -50%) 让卡片自身居中于该点
-   - 卡片不旋转，保持水平整齐排列
+   垂直时间线布局：编译器流水线
+   - 中央连接线贯穿
+   - 左右交替卡片布局
+   - 节点与卡片联动
+   - 配色：主色 #1e293b，强调色 #3b82f6 #10b981 #f59e0b #ef4444
    ========================================================================== */
-.fanOuter {
+
+/* ---- 配色变量 ---- */
+:root {
+  --tl-primary: #1e293b;
+  --tl-bg: #f8fafc;
+  --tl-blue: #3b82f6;
+  --tl-emerald: #10b981;
+  --tl-amber: #f59e0b;
+  --tl-red: #ef4444;
+  --tl-border: #e2e8f0;
+  --tl-border-strong: #cbd5e1;
+  --tl-text: #475569;
+  --tl-text-muted: #94a3b8;
+  --tl-text-faint: #cbd5e1;
+}
+
+/* ---- 时间线容器 ---- */
+.timeline {
+  position: relative;
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1.5rem 0 2rem;
+}
+
+/* ---- 中央连接线 ---- */
+.line {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(
+    to bottom,
+    var(--tl-primary) 0%,
+    var(--tl-border) 15%,
+    var(--tl-border) 85%,
+    var(--tl-primary) 100%
+  );
+  transform: translateX(-50%);
+}
+
+/* ---- 节点列表 ---- */
+.nodes {
   position: relative;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  /* 容器高度由最小高度保证，宽度由 JS 控制中心点 */
-  width: 100%;
-  min-height: 44rem;
-  padding: 2.5rem 1.5rem;
-  isolation: isolate;
+  flex-direction: column;
+  gap: 1.75rem;
 }
 
-/* ---- 中心锚点圆 ---- */
-.fanHub {
+/* ---- 单个时间线项 ---- */
+.item {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+}
+
+/* 左侧项：卡片在左，节点在右 */
+.itemLeft {
+  flex-direction: row;
+  padding-right: calc(50% + 2.5rem);
+}
+
+.itemLeft .card {
+  text-align: right;
+}
+
+.itemLeft .cardHeader {
+  flex-direction: row-reverse;
+}
+
+.itemLeft .cardIO {
+  justify-content: flex-end;
+}
+
+/* 右侧项：节点在左，卡片在右 */
+.itemRight {
+  flex-direction: row-reverse;
+  padding-left: calc(50% + 2.5rem);
+}
+
+/* ==========================================================================
+   节点圆点
+   ========================================================================== */
+.dot {
   position: absolute;
-  /* 放容器正中 */
-  top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%);
+  top: 0.75rem;
+  transform: translateX(-50%);
   z-index: 2;
+  width: 2.5rem;
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 3px solid var(--tl-bg);
+  box-shadow: 0 2px 4px rgb(0 0 0 / 0.08);
+  transition:
+    transform 200ms ease-out,
+    box-shadow 200ms ease-out;
+}
+
+.dotIndex {
+  font-size: 0.625rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #ffffff;
+}
+
+/* 节点类型颜色 */
+.dot_frontend {
+  background-color: var(--tl-blue);
+}
+
+.dot_optimize {
+  background-color: var(--tl-emerald);
+}
+
+.dot_backend {
+  background-color: var(--tl-primary);
+}
+
+.dot_capstone {
+  background: linear-gradient(135deg, var(--tl-blue), var(--tl-emerald));
+}
+
+/* 节点悬停：放大 + 发光 */
+.item:hover .dot {
+  transform: translateX(-50%) scale(1.15);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.15), 0 0 0 4px rgb(59, 130, 246 / 0.2);
+}
+
+.dot_optimize.item:hover .dot {
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.15), 0 0 0 4px rgb(16, 185, 129 / 0.2);
+}
+
+/* ==========================================================================
+   卡片样式
+   ========================================================================== */
+.card {
+  flex: 1;
+  max-width: 360px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 6.5rem;
-  height: 6.5rem;
-  border-radius: 50%;
-  background-color: var(--cc-accent);
-  box-shadow:
-    0 0 0 5px var(--cc-bg-page),
-    0 0 0 7px var(--cc-accent),
-    var(--cc-shadow-md);
-  text-align: center;
-  pointer-events: none;
-}
-
-.fanHubLabel {
-  font-size: 1.25rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--cc-accent-on);
-  line-height: 1.2;
-}
-
-.fanHubSub {
-  font-size: 0.6875rem;
-  font-weight: 500;
-  color: rgb(255 255 255 / 0.65);
-  margin-top: 0.25rem;
-  letter-spacing: 0.02em;
-}
-
-/* ---- 卡片层 ---- */
-.fanRing {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0;
-  height: 0;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  overflow: visible;
-}
-
-/* ---- 单个插槽 ---- */
-.fanSlot {
-  position: absolute;
-  /* 定位到圆周点：以中心为原点，沿 (x, y) 方向延伸 21rem */
-  /* translate(-50%, -50%) 让卡片自身中心对齐到该点 */
-  left: calc(var(--x) * 21rem);
-  top: calc(var(--y) * 21rem);
-  transform: translate(-50%, -50%);
-  pointer-events: auto;
-}
-
-/* ---- 卡片本体：水平排列，不旋转 ---- */
-.card {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.875rem 1rem 0.875rem 0.75rem;
-  width: 16rem;
-  background-color: var(--cc-bg-surface);
-  border: 1px solid var(--cc-border);
-  border-radius: var(--cc-radius-xl);
-  box-shadow: var(--cc-shadow-sm);
+  gap: 0.5rem;
+  padding: 1rem 1.125rem;
+  background-color: #ffffff;
+  border: 1px solid var(--tl-border);
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.04);
   text-decoration: none;
   color: inherit;
   transition:
-    box-shadow var(--cc-duration) var(--cc-ease),
-    border-color var(--cc-duration) var(--cc-ease),
-    transform var(--cc-duration) var(--cc-ease);
+    transform 200ms ease-out,
+    box-shadow 200ms ease-out,
+    border-color 200ms ease-out;
 }
 
 .card:hover {
   text-decoration: none;
   color: inherit;
-  border-color: var(--cc-green-200);
-  box-shadow: var(--cc-shadow-md);
-  transform: translateY(-2px);
+  border-color: var(--tl-blue);
+  box-shadow: 0 4px 12px -2px rgb(0 0 0 / 0.1), 0 2px 6px -2px rgb(0 0 0 / 0.06);
+  /* 拉出效果 */
+  transform: translateX(-6px);
 }
 
-[data-theme='dark'] .card:hover {
-  border-color: var(--cc-green-700);
+.itemLeft .card:hover {
+  transform: translateX(6px);
 }
 
-/* ---- 卡片内部 ---- */
-.cardIndex {
-  flex: none;
-  width: 2.125rem;
-  height: 2.125rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--cc-radius);
-  background-color: var(--cc-accent-soft);
-  color: var(--cc-accent-soft-fg);
-  font-size: 0.875rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  transition:
-    background-color var(--cc-duration) var(--cc-ease),
-    color var(--cc-duration) var(--cc-ease),
-    transform var(--cc-duration) var(--cc-ease);
-}
-
-.card:hover .cardIndex {
-  background-color: var(--cc-accent);
-  color: var(--cc-accent-on);
-  transform: scale(1.12);
-}
-
-.cardBody {
+/* 卡片头部 */
+.cardHeader {
   display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
-  flex: 1;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .cardTitle {
   font-size: 0.9375rem;
   font-weight: 600;
-  color: var(--cc-text-strong);
+  color: var(--tl-primary);
   margin: 0;
   line-height: 1.3;
-  /* 允许换行 */
 }
 
+/* 阶段标签 */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.5625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge_frontend {
+  background-color: rgb(59 130 246 / 0.1);
+  color: var(--tl-blue);
+}
+
+.badge_optimize {
+  background-color: rgb(16 185 129 / 0.1);
+  color: var(--tl-emerald);
+}
+
+.badge_backend {
+  background-color: rgb(30 41 59 / 0.08);
+  color: var(--tl-primary);
+}
+
+.badge_capstone {
+  background: linear-gradient(135deg, rgb(59 130 246 / 0.12), rgb(16 185 129 / 0.12));
+  color: var(--tl-blue);
+}
+
+/* 描述文字 */
 .cardDesc {
   font-size: 0.8125rem;
-  color: var(--cc-text-muted);
+  color: var(--tl-text);
   margin: 0;
-  line-height: 1.5;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  line-height: 1.55;
 }
 
-.cardMeta {
+/* 输入输出标注 */
+.cardIO {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: 0.25rem;
+}
+
+.ioChip {
   display: inline-flex;
-  align-self: flex-start;
-  margin-top: 0.2rem;
-  padding: 0.125rem 0.5rem;
-  border: 1px solid var(--cc-border);
-  border-radius: var(--cc-radius);
-  background-color: var(--cc-bg-subtle);
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1875rem 0.5rem;
+  background-color: var(--tl-bg);
+  border: 1px solid var(--tl-border);
+  border-radius: 0.375rem;
   font-size: 0.6875rem;
   font-weight: 500;
-  color: var(--cc-text-muted);
+  color: var(--tl-text);
+}
+
+.ioIcon {
+  font-size: 0.625rem;
+  color: var(--tl-text-faint);
+}
+
+.ioDivider {
+  font-size: 0.75rem;
+  color: var(--tl-text-faint);
 }
 
 /* ==========================================================================
-   响应式
+   动画：入场效果
    ========================================================================== */
-@media (max-width: 1100px) {
-  .fanSlot {
-    left: calc(var(--x) * 18rem);
-    top: calc(var(--y) * 18rem);
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.item {
+  animation: fadeSlideIn 400ms ease-out backwards;
+}
+
+.item:nth-child(1) { animation-delay: 0ms; }
+.item:nth-child(2) { animation-delay: 60ms; }
+.item:nth-child(3) { animation-delay: 120ms; }
+.item:nth-child(4) { animation-delay: 180ms; }
+.item:nth-child(5) { animation-delay: 240ms; }
+.item:nth-child(6) { animation-delay: 300ms; }
+.item:nth-child(7) { animation-delay: 360ms; }
+
+/* 减少动画 */
+@media (prefers-reduced-motion: reduce) {
+  .item {
+    animation: none;
+  }
+}
+
+/* ==========================================================================
+   响应式：平板
+   ========================================================================== */
+@media (max-width: 768px) {
+  .timeline {
+    padding-left: 2rem;
+    padding-right: 0;
+  }
+
+  .line {
+    left: 0.75rem;
+  }
+
+  /* 所有项都在右侧，左侧留空给连接线 */
+  .item {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  .itemLeft,
+  .itemRight {
+    flex-direction: row;
+  }
+
+  .dot {
+    position: absolute;
+    left: 0;
+    top: 0.75rem;
+    transform: translateX(-50%);
   }
 
   .card {
-    width: 14rem;
-    padding: 0.75rem 0.875rem 0.75rem 0.625rem;
+    max-width: none;
+    text-align: left !important;
+  }
+
+  .cardHeader {
+    flex-direction: row !important;
+  }
+
+  .cardIO {
+    justify-content: flex-start !important;
+  }
+
+  .card:hover {
+    transform: translateX(6px);
+  }
+}
+
+/* ==========================================================================
+   响应式：手机
+   ========================================================================== */
+@media (max-width: 480px) {
+  .timeline {
+    padding-left: 1.5rem;
+  }
+
+  .dot {
+    width: 2rem;
+    height: 2rem;
+    top: 0.75rem;
+  }
+
+  .dotIndex {
+    font-size: 0.5625rem;
+  }
+
+  .card {
+    padding: 0.875rem;
   }
 
   .cardTitle {
@@ -200,70 +375,17 @@
 
   .cardDesc {
     font-size: 0.75rem;
-  }
-
-  .cardMeta {
-    font-size: 0.625rem;
-  }
-}
-
-@media (max-width: 768px) {
-  /* 平板及以下：降级为普通网格 */
-  .fanOuter {
-    min-height: auto;
-    padding: 0;
-  }
-
-  .fanHub {
-    display: none;
-  }
-
-  .fanRing {
-    position: static;
-    width: auto;
-    height: auto;
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 0.75rem;
-    padding: 1rem 0;
+    -webkit-line-clamp: 3;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
     overflow: hidden;
   }
 
-  .fanSlot {
-    position: static;
-    transform: none !important;
-    left: auto !important;
-    top: auto !important;
+  .timeline {
+    padding-top: 1rem;
   }
 
-  .card {
-    width: auto;
-    padding: 1rem 1.125rem;
-    transform: none !important;
-  }
-
-  .cardIndex {
-    width: 2.125rem;
-    height: 2.125rem;
-    font-size: 0.875rem;
-  }
-
-  .cardTitle {
-    font-size: 1rem;
-  }
-
-  .cardDesc {
-    font-size: 0.875rem;
-    -webkit-line-clamp: 3;
-  }
-
-  .cardMeta {
-    font-size: 0.75rem;
-  }
-}
-
-@media (max-width: 480px) {
-  .fanRing {
-    grid-template-columns: 1fr;
+  .nodes {
+    gap: 1.25rem;
   }
 }
