@@ -103,15 +103,14 @@ toyc-cpp/           # 仓库目录名由你决定，此处以 toyc-cpp 为例
 ├── CMakeLists.txt
 ├── src/
 ├── third_party/toyc/libtoyc.a
-├── README.md
-└── group.csv
+├── README.md       # 简要说明编译器架构
 ```
 
-`README.md` 需要说明 LLVM IR 输入输出格式、优化等级和命令行参数。
+`README.md` 需要说明本阶段实现的优化内容与实现思路。
 
 ## 五、本部分优化项速查
 
-机器无关代码优化已在侧边栏「**机器无关代码优化**」分类下展开为独立子页面，每页深入讲解一种优化主题：
+
 
 | 子页面 | 涵盖主题 | 关键考点 |
 | --- | --- | --- |

@@ -40,19 +40,19 @@ part1: 修复注释跨行时的状态回退缺陷
 
 ## 三、代码规范
 
-### 命名与注释
+### 命名与注释（建议）
 
 按语言选择对应的命名规则，同一项目内必须保持一致：
 
 - **类型名**：使用 **PascalCase**（首字母大写的驼峰），如 `Token`、`BasicBlock`、`LiveInterval`；
-- **函数与变量（C / C++ / OCaml）**：使用 **snake_case**（全小写下划线连接），如 `next_token`、`current_line`；
+- **函数与变量（C / C++ / Rust）**：使用 **snake_case**（全小写下划线连接），如 `next_token`、`current_line`；
 - **函数与变量（Java）**：使用 **camelCase**（首字母小写的驼峰），如 `nextToken`、`currentLine`；
 - **常量**：使用 **UPPER_SNAKE_CASE**（全大写下划线），如 `MAX_TOKEN_LEN`、`EOF`。
 
 示例：
 
 ```cpp
-// C/C++ / OCaml 风格
+// C/C++ / Rust 风格
 struct Token {                  // 类型名 PascalCase
   TokenType type;               // 变量名 snake_case
   std::string lexeme;
@@ -99,22 +99,17 @@ error: line 12, column 5: unexpected character '@'
 ./compiler --dump-asm < input.c > input.s   # 第四部分：基线汇编
 ./compiler --dump-asm -opt < input.c > input.opt.s  # 第五、六部分：优化汇编
 
-# 链接 ToyC 运行时库并运行
-riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
-  -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
-./input < runtime.in > input.out      # runtime.in 为 ToyC 程序运行时的 stdin 数据
-                                       # input.out 是 ToyC 程序 stdout，是评测对比对象
 ```
 
 `--dump-*` 模式用于检查中间结果；最终评测重点是 `--dump-asm` 产生的 RV64GC 汇编及其运行结果。
 
 ## 四、验收方式
 
-提交前请阅读[希冀提交与评测](./submission)，完成干净目录 clone、构建、RV64GC 汇编链接和 QEMU 运行检查。
+提交前请阅读[希冀提交与评测](./submission)，提交后希冀评测机会自行评测你的编译器正确性与性能，除此之外你还需要对每阶段实现原理代码比较熟悉，因为助教会提问相关内容（尽管你们可能使用cursor、codex、claudecode或其他agent进行编写代码，但你仍要保证输出的代码在你的可理解范围内，这是使用ai最基本的要求）。
 
 - **自动测试**：助教用统一的测试集运行你的编译器，比对输出；
-- **现场答辩**：随机抽取一段代码，要求你口述其在本阶段被如何处理；
-- **代码走查**：抽查关键数据结构（符号表、活跃变量、寄存器分配）。
+- **现场答辩**：随机问答，并要求你解释某阶段产物被如何处理；
+- **代码抽查**：抽查关键数据结构（符号表、活跃变量、寄存器分配）。
 
 ## 五、进度建议
 

@@ -7,7 +7,7 @@ description: 将 LLVM IR 翻译为 RISC-V64GC 汇编，建立可运行的后端�
 
 # 第四部分 · 目标代码生成
 
-本部分把第三部分生成的 LLVM IR 翻译为可运行的 RISC-V64GC 汇编。先完成正确的基线后端，再在第五、六部分分别优化 IR 和目标代码。
+本部分把第三部分生成的 LLVM IR 翻译为可运行的 RISC-V64GC 汇编。先完成正确的基线后端，再在第五、六部分分别优化 IR 和目标代码。尽管我们把寄存器分配放在了优化部分，但实现寄存器分配的编译器尚且才算一个完整的编译器，因此完成该部分实验，**你们必须要实现一种寄存器分配算法**。
 
 ```mermaid
 flowchart LR
@@ -604,7 +604,7 @@ cmake --build build
 ./compiler --dump-asm < input.c > input.s
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
   -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
-./input < runtime.in > input.out
+./input < input.in > result.out
 ```
 
 必须提交可编译的完整文件：
@@ -613,13 +613,12 @@ riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
 toyc-cpp/           # 仓库目录名由你决定，此处以 toyc-cpp 为例
 ├── CMakeLists.txt
 ├── src/
-│    ├── asm_backend.cpp    # 主要后端逻辑
-│    ├── frame_layout.cpp   # 栈帧布局
+│    ├── asm_backend.cpp     # 主要后端逻辑
+│    ├── frame_layout.cpp    # 栈帧布局
 │    ├── instruction_sel.cpp # 指令选择
-│    └── riscv_abi.cpp      # 调用约定
+│    └── riscv_abi.cpp       # 调用约定
 ├── third_party/toyc/libtoyc.a
-├── README.md
-└── group.csv
+├── README.md                # 简要说明编译器架构
 ```
 
 `README.md` 应包含指令选择表、phi 消除策略、参数传递方式、栈帧布局和基线测试结果。基线测试应包含至少 5 个测试用例的汇编输出。

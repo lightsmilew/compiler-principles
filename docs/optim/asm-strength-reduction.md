@@ -185,13 +185,24 @@ EOF
 ./compiler --dump-asm -opt   < loop.c > loop.opt.s
 diff loop.s loop.opt.s
 
-# 比较运行时间
+# 链接并运行（qemu-user 快速验证）
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
   -nostdlib -static loop.s     third_party/toyc/libtoyc.a -o loop
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
   -nostdlib -static loop.opt.s third_party/toyc/libtoyc.a -o loop.opt
-time qemu-riscv64 loop     < runtime.in > loop.out
-time qemu-riscv64 loop.opt < runtime.in > loop.opt.out
+./loop     < loop.in > loop_result.out
+./loop.opt < loop.in > loop_result_opt.out
+
+# 如需完整虚拟机环境，使用 qemu-system 启动
+qemu-system-riscv64 \
+  -machine virt \
+  -cpu rv64gc \
+  -nographic -m 4G -smp 4 \
+  -kernel /usr/lib/u-boot/qemu-riscv64_smode/uboot.elf \
+  -device virtio-net-device,netdev=eth0 \
+  -netdev user,id=eth0,hostfwd=tcp::2222-:22 \
+  -device virtio-rng-pci \
+  -drive file=ubuntu-24.04-riscv64.img,format=raw,if=virtio
 ```
 
 回到：[目标代码优化总览](../labs/part6-target-optimization)。

@@ -40,7 +40,52 @@ flowchart TD
 - **Instruction**：基本计算单元，结果用 `%name` 表示。
 - **SSA Value**：每个 SSA 名称**在函数内只被定义一次**；控制流汇合处用 `phi` 选择来自不同前驱的值。
 
-### 1.2 常用指令族
+### 1.2 SSA 形式
+
+SSA（Static Single Assignment，静态单赋值）是一种 IR 组织形式：每个 SSA 名称在一个函数中只能被定义一次，但可以被多次使用。这里的"单次赋值"针对编译器内部的值，不是说源程序变量只能赋值一次。
+
+例如 ToyC：
+
+```c
+x = a + 1;
+x = x * 2;
+```
+
+在普通变量表示中，两次赋值都写入 `x`；在 SSA 中，每次赋值产生新版本：
+
+```llvm
+%x1 = add i32 %a, 1
+%x2 = mul i32 %x1, 2
+```
+
+这样每个名称的定义位置唯一，Use-Def / Def-Use 链是显式的，可以直接从一个值找到它的所有使用点，或从一条指令找到它的所有定义点。
+
+### 1.3 控制流汇合与 phi
+
+如果同一个源变量在不同控制流路径被赋予不同值，单纯改名无法决定汇合处使用哪个版本。`phi` 根据"从哪条前驱边进入"选择值：
+
+```c
+if (cond) x = 1;
+else      x = 2;
+return x;
+```
+
+对应的 LLVM IR 结构是：
+
+```llvm
+br i1 %cond, label %then, label %else
+then:
+  br label %join
+else:
+  br label %join
+join:
+  %x = phi i32 [ 1, %then ], [ 2, %else ]
+  ret i32 %x
+```
+
+`phi` 的参数成对出现：`[值, 前驱块]`。优化器可以遍历 `phi` 的 operand，快速构建数据流图。
+
+### 1.4 常用指令族
 
 | 类别 | 关键指令 | 说明 |
 |---|---|---|
@@ -53,7 +98,7 @@ flowchart TD
 | 类型转换 | `trunc / zext / sext / bitcast / ptrtoint / inttoptr` | 影响后续优化合法性 |
 | 选择 | `select i1 %c, i32 %a, i32 %b` | 等价于无分支的三目运算符 |
 
-### 1.3 类型系统
+### 1.5 类型系统
 
 LLVM IR 的类型影响 lowering 和优化合法性：
 
@@ -68,7 +113,7 @@ LLVM IR 的类型影响 lowering 和优化合法性：
 
 举例：`getelementptr [10 x i32], ptr %arr, i64 0, i64 %i` 会算 `&arr[i]`，但不读内存；后续 `load i32, ptr %p` 才真正访问内存。这种"GEP 只算地址、load/store 才访问"的两阶段设计是 LLVM 内存模型的精髓，也是 mem2reg 等优化能工作的基础。
 
-### 1.4 内存模型与 SSA 提升
+### 1.6 内存模型与 SSA 提升
 
 LLVM IR 用 `alloca` 模拟"局部变量在栈上的位置"：
 
@@ -115,7 +160,7 @@ join:
 
 实现建议：先输出 `alloca/load/store` 形式以保证正确性，再以显式优化提升到 SSA。课程项目不强制要求 mem2reg；但若不实现，提升阶段只能停留在内存模型，无法利用寄存器直接持有局部变量，目标程序运行速度会明显较慢。
 
-### 1.5 典型 ToyC 程序完整示例
+### 1.7 典型 ToyC 程序完整示例
 
 下面把 `int sum_abs(int *A, int n)`（求数组前 n 个元素的绝对值之和）翻译成 LLVM IR，涵盖循环、归纳变量 `phi`、内存加载、函数调用。
 
@@ -180,7 +225,7 @@ loop.end:
 - `call` 隐含 calling convention：`@abs(i32 %elem)` 默认按 C 调用约定传参；返回 `i32` 放在 `a0`（RISC-V）或 `eax`（x86）；ToyC 编译器不需要手动处理，LLVM 后端会处理。
 - `sext i32 %i to i64`：GEP 索引要求 64 位（与目标机器位宽一致），所以把 `i32` 提升为 `i64`。
 
-### 1.6 LLVM IR 到 RISC-V 的端到端 lowering
+### 1.8 LLVM IR 到 RISC-V 的端到端 lowering
 
 把上面的 `sum_abs` 在 `opt -O2` 后交给 `llc --target=riscv64-unknown-elf`，得到的 RV64GC 汇编（简化）：
 
@@ -214,83 +259,23 @@ sum_abs:
 - 寄存器分配：`%i`、`%s`、参数 `A`、`n` 映射到 `a0~a4`。
 - CFG 简化和汇编化：phi 节点被消除成直接寄存器传递；GEP 变成 `slli + add` 的指针算术。
 
-### 1.7 LLVM IR 的优点与局限
+### 1.9 LLVM IR 的优点与局限
 
 优点
 
-- 手写后端被省略：ToyC 只要产生 LLVM IR，立即获得 RV64GC / x86_64 / ARM64 后端以及 `-O0/-O1/-O2/-O3` 全部优化，学生不必自研寄存器分配与指令选择。
-- mem2reg 把内存变量自动提升为 SSA：ToyC 编译器可以先输出 `alloca + store + load` 形式保证正确性，再开启优化得到高质量 SSA。
-- 强类型便于调试：每个 SSA 值都有类型，`llvm-as` 编译出错时报错精确到行号和列号，方便学生定位。
-- 与 GDB / 工具链衔接：`llvm -g` 编译后 `addr2line` 能直接对应到源码行。
+- **SSA 形式天然支持数据流分析**：每个值只被定义一次，Use-Def / Def-Use 链是显式的，DCE、CSE、CP 等优化可以直接按算法实现，不必自行维护活跃信息。
+- **CFG 是第一公民**：基本块与前驱/后继关系由 IR 结构直接表示，循环识别、控制流简化、基本块合并等优化可以建立在块的拓扑序上。
+- **优化算法有成熟参考**：GCC/LLVM 社区对每个 pass（死代码消除、常量传播、循环不变代码外提、强度削减等）都有公开算法和论文，你们可以实现与验证课本算法。
+- **mid-end 与 back-end 解耦**：ToyC 只要输出符合规范的 LLVM IR，中端优化和后端代码生成完全交给 LLVM 完成，实验只需聚焦 IR 层面的优化。
+- **IR 足够简单适合课程**：三地址码、显式 PHI、基本类型系统，你们无需学习 MLIR 的 dialect 层次即可完成完整的中端优化链路。
 
 局限
 
 - 高层信息被过早丢失：`for (int i = 0; i < n; i++)` 在 lowering 后只剩 `phi + icmp + addi`；想写跨循环优化（fusion、tiling）已经无法直接从 IR 看出"这是循环"，必须重建 LoopInfo。
 - 内存模型复杂：`load/store/getelementptr/atomic/ordering/volatile` 的语义细节多；初学者常误用 `volatile` 当 `atomic`，或者忘记 GEP 必须 64 位索引。
-- API 体量：LLVM C++ API 有 20+ 万行；课程项目集成 LLVM 需要正确链接 `LLVMCore / LLVMSupport / LLVMTarget / LLVMRISCV` 等十几个库，且 ABI 跨版本不兼容。
 - 与 MLIR 重复建设：LLVM 15+ 已开始用 MLIR 重建部分基础设施；如果课程选了 LLVM IR，未来想升级到 MLIR 几乎要重写 IR 生成层。
 
-SSA（Static Single Assignment，静态单赋值）是一种 IR 组织形式：每个 SSA 名称在一个函数中只能被定义一次，但可以被多次使用。这里的“单次赋值”针对编译器内部的值，不是说源程序变量只能赋值一次。
 
-例如 ToyC：
-
-```c
-x = a + 1;
-x = x * 2;
-```
-
-在普通变量表示中，两次赋值都写入 `x`；在 SSA 中，每次赋值产生新版本：
-
-```llvm
-%x1 = add i32 %a, 1
-%x2 = mul i32 %x1, 2
-```
-
-这样每个名称的定义位置唯一，Use-Def 链可以直接从 `%x2` 找到第二条指令，再从 `%x1` 找到第一条指令。SSA 的主要目的不是改变程序语义，而是让数据流关系显式化，便于优化器判断一个值来自哪里。
-
-### 控制流汇合与 phi
-
-如果同一个源变量在不同控制流路径被赋予不同值，单纯改名无法决定汇合处使用哪个版本。`phi` 根据“从哪条前驱边进入”选择值：
-
-```c
-if (cond) x = 1;
-else      x = 2;
-return x;
-```
-
-对应的 LLVM IR 结构是：
-
-```llvm
-br i1 %cond, label %then, label %else
-then:
-  br label %join
-else:
-  br label %join
-join:
-  %x = phi i32 [ 1, %then ], [ 2, %else ]
-  ret i32 %x
-```
-
-`phi` 不是普通运行时函数调用；它表示在控制流分析中选择前驱块产生的值，最终降低到机器代码时通常会转换成适当的寄存器移动。
-
-### 从内存变量到 SSA
-
-初始 lowering 可以用地址形式保持实现简单：
-
-```llvm
-%x = alloca i32
-store i32 1, ptr %x
-%v = load i32, ptr %x
-```
-
-这种形式允许多个 `store`，所以变量的定义关系需要通过内存分析确定。`mem2reg` 会识别适合提升的局部变量，插入必要的 `phi`，再把 `load/store` 转成 SSA 值。课程实现可以先使用 `alloca/load/store` 生成正确 IR，再将 mem2reg 作为选做优化。
-
-### SSA 的优点和代价
-
-- 优点：每个值只有一个定义，常量传播、复制传播、死代码消除和 Use-Def 链实现更直接；
-- 优点：控制流汇合处的不同来源由 `phi` 明确表示，减少隐式的变量版本推断；
-- 代价：需要维护基本块前驱关系和 `phi` 参数；
-- 代价：离开 SSA 生成 RISC-V 时，需要处理 `phi` 消除、并行复制和寄存器冲突。
 
 ## 二、Use-Def 链
 
@@ -368,17 +353,9 @@ replace_all_uses(old_value, new_value):
   old_value.uses.clear()
 ```
 
-## 三、LLVM IR 的优点与局限
 
-详细列表见 [1.7 LLVM IR 的优点与局限](#17-llvm-ir-的优点与局限)；这里给出与 MLIR 对比的总结。
 
-LLVM IR 适合愿意用现成 SSA 与后端、目标是尽快产出 RV64GC 汇编、不强调跨阶段 lowering 的 ToyC 实现。
-
-MLIR 适合希望保留 ToyC 方言、控制多层抽象切换顺序，或未来会扩展后端（如新增 x86 / GPU）的项目。
-
-两者的选择权衡在 [六、选型建议](#六选型建议) 给出。
-
-## 四、MLIR 的结构
+## 三、MLIR 的结构
 
 MLIR 使用通用 IR 基础设施和可组合的 Dialect；它的核心概念是：
 
@@ -397,7 +374,7 @@ flowchart LR
 
 不同抽象层通过 lowering pass 转换，例如 ToyC 方言可以先保留 `toy.if` 和 `toy.call`，再降低为 `scf.if`、`func.call` 和 LLVM Dialect。
 
-### 4.1 三个核心结构化控制流方言：Affine / SCF / CF
+### .1 三个核心结构化控制流方言：Affine / SCF / CF
 
 MLIR 提供了三个层次的"结构化控制流"方言，它们表达循环与分支的能力不同，能写的优化也不同。三者的关系是"由高到低逐步 lowering"：
 
@@ -490,7 +467,7 @@ affine.for %ii = 0 to 128 step 32 {
 2. 多面体分析的编译时间和内存代价与循环嵌套深度、维度呈指数关系，深层循环会非常慢。
 3. 难以表达数据相关的控制流（如 `if (ptr != nullptr)`），要回退到 SCF/CF。
 
-#### 4.1.2 SCF Dialect：通用结构化控制流
+#### .1.2 SCF Dialect：通用结构化控制流
 
 SCF（Structured Control Flow）是 Affine 的"通用版"：循环边界、步长和迭代变量可以是任意 SSA Value，但代价是失去了多面体依赖分析能力：
 
@@ -556,7 +533,7 @@ SCF（Structured Control Flow）是 Affine 的"通用版"：循环边界、步�
 2. 结构化要求意味着 `break`、`continue` 这类中途跳转必须降低为 `cf.cond_br`，降低后 SSA 重命名与 PHI 插入由后续 pass 完成。
 3. `scf.for` 不能直接表达"两个循环并行执行"（OpenMP-style），要么手动展开，要么显式加注释驱动后续并行 pass。
 
-#### 4.1.3 CF Dialect：显式控制流图
+#### 3.1.3 CF Dialect：显式控制流图
 
 CF（Control Flow）方言模拟 LLVM IR 的基本块 + 显式 `br` / `cond_br`，是最接近汇编的一层：
 
@@ -605,7 +582,7 @@ cf.br ^bb1(%c0_i32, %ptr : i32, index)
 3. 难以做跨函数的 inlining / 跨过程优化，因为 CFG 的"循环"和"调用关系"是不同抽象层。
 4. 错误处理恢复困难：基本块参数（PHI）破坏"指令可任意重排"的不变性。
 
-#### 4.1.4 三层对比表
+#### .1.4 三层对比表
 
 | 维度 | Affine | SCF | CF |
 |---|---|---|---|
@@ -616,16 +593,9 @@ cf.br ^bb1(%c0_i32, %ptr : i32, index)
 | 适用循环 | 边界和下标静态已知 | 任意动态边界 | 所有 |
 | 适合的下游 | MemRef lowering | CF / LLVM Dialect | 机器码 |
 
-#### 4.1.5 选型决策（针对 ToyC）
 
-如果你的 ToyC 程序主要是：
 
-- 数组下标都是常量或循环变量的仿射组合（矩阵乘法、卷积、Stencil）→ 用 Affine，可以一行配置跑通 tiling。
-- 包含动态数据结构和控制流（链表、指针操作、`if-else` 多分支）→ 用 SCF，把循环降低到 SCF 再做常规优化。
-- 已经写好高层优化、专注后端 → 直接 lowering 到 CF，跳过中层的循环变换 pass。
-- 同时含两类代码 → 写一个 ToyC 方言，对能写成仿射的循环自动 lowering 到 Affine，其余 lowering 到 SCF，由后续 pass 统一降为 CF。
-
-## 五、MLIR 的优点与局限
+### 3.2 MLIR 的优点与局限
 
 MLIR 仅作参考架构，ToyC 项目禁止集成 MLIR。下面说明多层抽象对理解编译器的价值，以及它本身的工程负担。
 
@@ -643,7 +613,7 @@ MLIR 仅作参考架构，ToyC 项目禁止集成 MLIR。下面说明多层抽�
 - 跨方言转换不自动：`Affine → SCF` 容易（依赖分析能跑），但 `SCF → CF` 涉及循环结构识别与 PHI 插入，写起来不轻松。
 - 构建系统门槛高：MLIR 通常作为 LLVM 项目的一部分构建，体量几十 GB；用 `apt` 装的发行版二进制往往版本对不上。建议用源码构建或预编译 release。
 
-## 六、选型建议
+## 四、选型建议
 
 ToyC 编译器全程禁止引入任何第三方运行时库（包括 LLVM、MLIR 等）。以下表格仅说明各方案作为"参考架构"时的定位；无论选择哪一种，IR 生成、优化和代码输出模块都必须自行实现。
 

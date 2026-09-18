@@ -10,17 +10,26 @@ description: 编译器实验所需的环境准备、推荐工具与最小可运�
 
 ## 一、语言与编译器
 
-实验代码可以使用 **C / C++、Java 或 OCaml** 中任意一种语言实现，
-但整个实验过程中不可更换语言。实验统一在 Linux 环境下完成，建议使用命令行工具编译和测试。
+实验代码可以使用 **C / C++、Java 或 Rust** 中任意一种语言实现，
+但请注意你的编译器请不要同时使用多种语言（可能会影响评测机构建）。实验统一在 Linux 环境下完成，建议使用命令行工具编译和测试。
 
 | 语言 | 构建系统 | 可用工具 |
 | --- | --- | --- |
-| C / C++ | CMake 4.0.3、Make | Flex、Bison/Yacc、ANTLR 4.13.1 |
-| Java | Maven 3.9.11、Gradle 8.5 | ANTLR 4.13.1 |
-| OCaml | Dune 3.19 | ocamllex、ocamlyacc、Menhir |
+| C / C++ | CMake、Make | Flex、Bison/Yacc、ANTLR 4.13.1 |
+| Java | JDK 21、Maven 3.9.11、Gradle 8.5 | ANTLR 4.13.1 |
+| Rust | Cargo 1.85.0 | Flex、Bison |
 
 :::info[关于生成器的使用]
-实验一与实验二的词法/语法分析**允许**使用 Flex、Bison、ANTLR、Menhir 等生成器，属于选做工具。实验报告必须说明输入的文法文件全文、生成命令以及生成代码如何接入项目主程序；仅提交生成物而未说明原理的，最高按 80% 计分。ANTLR 的详细用法（含 .g4 编写、CMake/Maven 集成、Visitor 模式实现）见本节下方。
+实验一与实验二的词法/语法分析**允许**使用 Flex、Bison、ANTLR等生成器，属于选做工具。使用生成器时，实验报告**必须**详细说明以下内容：
+
+1. **词法分析器**：正则表达式规则如何匹配 Token（如标识符、关键字、常量、运算符等）
+2. **语法分析器**：采用的分析方法
+   - **自下而上（Bottoms-Up）**：如 Bison 的 LALR(1) / SLR 分析，通过移入-规约过程构建分析表
+   - **自上而下（Top-Down）**：如 ANTLR 的 LL(*) 分析，通过递归下降或预测分析
+3. **文法文件全文**：原始文法规则
+
+
+仅提交生成物而未说明原理的，最高按 80% 计分。ANTLR 的详细用法（含 .g4 编写、CMake/Maven 集成、Visitor 模式实现）见本节下方。
 :::
 
 ### 1. ANTLR 4 详细用法（C++）
@@ -54,9 +63,9 @@ ANTLR 官方文档（含完整语法参考）：[https://www.antlr.org/](https:/
 
 **第一步：编写 .g4 语法文件**
 
-一个 `.g4` 文件分为两部分：`grammar` 声明（必须与文件名一致）以及词法规则和语法规则的定义。
+一个 `.g4` 文件分为两部分：`grammar` 声明以及词法规则和语法规则的定义。
 
-以下是一个最小化的 ToyC 文法片段（用于说明结构，不覆盖全部语法）：
+以下是一个最小化的 ToyC 文法片段（用于说明结构，不保证完全正确）：
 
 ```antlr
 // ToyC.g4
@@ -284,10 +293,7 @@ ASTBuilder.visitXxx（Visitor 遍历：ParseTree → AST）
 后续阶段（语义分析、IR 生成…）
 ```
 
-:::info[关于使用生成器的前提]
-若使用 Flex/Bison，实验报告中必须给出完整的 `.l` / `.y` 文件，
-并额外说明如何手工构造等价的分析器；否则该实验最高按 80% 计分。
-:::
+
 
 ### 2. ANTLR 4 详细用法（Java）
 
@@ -349,7 +355,7 @@ dependencies {
 ```
 
 :::info
-Java 项目也可以手动下载 `antlr-4.13.1-complete.jar` 到本地，但使用 Maven/Gradle 依赖更便于团队协作；不要把大体积 jar 包提交到仓库。
+Java 项目也可以手动下载 `antlr-4.13.1-complete.jar` 到本地，但使用 Maven/Gradle 依赖更便于团队协作中的版本管理；不要把大体积 jar 包提交到仓库。
 :::
 
 **生成代码**
@@ -401,7 +407,7 @@ Maven/Gradle 生成的类会自动在 `target/generated-sources/antlr/` 下，�
 
 ### 0. Windows 用户安装 WSL2
 
-作业在 Linux 环境下构建和测试。Windows 10/11 用户推荐使用 WSL2 Ubuntu，不建议直接在 PowerShell 中混用 Windows 和 Linux 工具链。
+ToyC编译器在 Linux 环境下构建和测试。Windows 10/11 用户推荐使用 WSL2 Ubuntu，对比 VM 具有更轻量级的优势 。
 
 在管理员 PowerShell 中执行：
 
@@ -417,7 +423,7 @@ wsl --status
 uname -a
 ```
 
-项目建议放在 WSL 文件系统中，例如 `~/work/ToyC`，而不是 `/mnt/c` 下，以减少跨文件系统访问和权限问题。VS Code 可安装 **WSL** 扩展后使用 `code .` 打开当前 Linux 目录。
+项目建议放在 WSL 文件系统中，例如 `~/work/ToyC`，而不是 `/mnt/c`或者`/mnt/d` 等 Windows 原生目录 下，以减少跨文件系统访问和权限问题。VS Code 可安装 **WSL** 扩展后使用 `code .` 打开当前 Linux 目录。
 
 ### 1. Git
 
@@ -426,12 +432,15 @@ uname -a
 ```bash
 git config --global user.name "你的姓名"
 git config --global user.email "你的邮箱"
+
+#添加远程仓库
+git remote add <给你的远程仓库命名> <url>
 ```
 
-### 2. Java 环境（Maven / Gradle）
+### 2. Java 环境（JDK 21 / Maven / Gradle）
 
 ```bash
-sudo apt install -y openjdk-17-jdk curl unzip
+sudo apt install -y openjdk-21-jdk curl unzip
 
 # Maven 3.9.11
 curl -LO https://archive.apache.org/dist/maven/maven-3/3.9.11/binaries/apache-maven-3.9.11-bin.tar.gz
@@ -452,124 +461,164 @@ mvn --version
 gradle --version
 ```
 
-### 3. OCaml 环境（Dune / Menhir）
+### 3. Rust 环境（Cargo）
 
 ```bash
-sudo apt install -y ocaml opam m4 pkg-config
-opam init --disable-sandboxing -y
-eval "$(opam env)"
-opam switch create 5.2.0 ocaml-base-compiler.5.2.0 -y
-eval "$(opam env)"
-opam install dune menhir -y
+# 安装 Rust 工具链（包含 Cargo 1.85.0）
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+source "$HOME/.cargo/env"
 
-# ocamllex 和 ocamlyacc 随 OCaml 编译器安装
-ocamlc -version
-ocamllex -version
-ocamlyacc --version
-dune --version
-menhir --version
+# 验证安装
+rustc --version
+cargo --version
+
+# Cargo 常用命令
+cargo new my_compiler     # 创建新项目
+cargo build               # 编译项目
+cargo run --bin compiler  # 运行编译器
+cargo build --release     #  Release 模式编译
 ```
+
+Rust 项目通常使用 `Cargo.toml` 管理依赖，无需额外的包管理器。
 
 ### 4. C/C++ 构建工具（CMake / Make）
 
 ```bash
-# Make 和基础编译器
-sudo apt install -y build-essential
+# 安装 CMake、基础编译器（Ubuntu 24.04 源中 CMake 版本 ≥ 3.28，满足需求）
+sudo apt install -y cmake build-essential g++
 
-# 安装指定的 CMake 4.0.3；pip 版本适合 WSL 用户，不影响系统 apt 版本
-python3 -m pip install --user cmake==4.0.3
-export PATH="$HOME/.local/bin:$PATH"
-
+# 验证工具链是否可用
 cmake --version
 make --version
 gcc --version
 g++ --version
 ```
 
-如果 `pip` 不可用，先执行 `sudo apt install -y python3-pip`；也可以从
-[CMake 官方下载页](https://cmake.org/download/) 下载 CMake 4.0.3 的 Linux 二进制包。
 
-:::warning[使用生成器的前提]
-若使用 Flex/Bison，实验报告中必须给出完整的 `.l` / `.y` 文件，
-并额外说明如何手工构造等价的分析器；否则该实验最高按 80% 计分。
-:::
 
-ANTLR、Menhir 等生成器同样需要在报告中说明输入文法、生成命令和生成代码如何接入项目。生成器是选做工具，不改变 ToyC 文法和统一输出格式。
 
-### 5. 汇编与运行环境（第四至第六部分需要）
+### 5. 汇编与运行环境
 
-本次作业统一生成 **RISC-V64** 目标代码，具体目标为 **RV64GC**，不得生成 RISC-V32、MIPS 或 x86-64 指令：
+本次作业统一生成 **RISC-V64** 目标代码，具体目标为 **RV64GC**，具体含义为 RISC-V 64位架构支持GC扩展：
 
 ```bash
-# Ubuntu/WSL 安装 RISC-V 64 位交叉工具链和 QEMU
+# Ubuntu/WSL 安装 RISC-V 64 位交叉工具链
 sudo apt install -y gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf \
-  gcc-riscv64-linux-gnu qemu-user qemu-system-misc
+  gcc-riscv64-linux-gnu
 
-# 查看工具链和 QEMU
+# 查看工具链
 riscv64-unknown-elf-gcc --version
-qemu-riscv64 --version
 ```
 
-如果发行版没有提供 `qemu-riscv64`，可以安装 `qemu-user-static`，或从 QEMU 官方版本安装。编译器输出应使用 RV64 寄存器和 ABI，推荐命令参数为：
+如果需要快速验证编译产物，可以安装 `qemu-user`：
 
 ```bash
-riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
-  -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
-printf '42\n' | qemu-riscv64 ./input > input.out
+# qemu-user 适合快速验证单个静态 ELF 文件
+sudo apt install -y qemu-user
+qemu-riscv64 ./your_program
 ```
 
-若课程组提供的是 Linux 目标库，则使用课程指定的 `riscv64-unknown-linux-gnu-*` 工具链和 ABI；不要把 RV32 库与 RV64 汇编混合链接。运行时库使用课程组提供的 `libtoyc.a`，编译器需要为 `getint()` 和 `putint(int)` 生成外部调用，并在最终链接时加入该库。
+### 6. QEMU 系统模式虚拟机
 
-### 6. QEMU 启动与标准输入
+如果需要完整的 Linux 开发环境（SSH 登录、文件系统、完整的工具链运行），使用 `qemu-system-riscv64` 启动虚拟机。
 
-编译器本身从标准输入读取 ToyC 源代码，生成汇编到标准输出。**可执行文件统一命名为 `compiler`**。建议把 ToyC 源文件命名为 `*.c`，把运行时数据命名为 `*.in`，把汇编命名为 `*.s`，把链接后的可执行文件命名为无后缀名（如 `input`），把程序运行后的标准输出命名为 `*.out`，与助教评测脚本约定保持一致：
+**前置准备**
+
+1. 下载 Ubuntu 24.04 RISC-V 镜像：
 
 ```bash
+# 下载预装的 Ubuntu RISC-V 镜像（约 2GB）
+wget -nc https://cdimage.ubuntu.com/releases/noble/release/ubuntu-24.04.2-preinstalled-serverriscv64.img.xz
+xz -dk ubuntu-24.04.2-preinstalled-server-riscv64.img.xz
+
+#给镜像扩容
+qemu-img resize -f raw ubuntu-24.04.2-preinstalled-server-riscv64.img +5G
+```
+
+2. 安装 QEMU 系统模式：
+
+```bash
+sudo apt install -y qemu-system-misc u-boot-menu
+```
+
+**启动虚拟机**
+
+```bash
+# 启动 QEMU RISC-V64 虚拟机
+qemu-system-riscv64 \
+  -machine virt \
+  -cpu rv64gc \
+  -nographic \
+  -m 4G \
+  -smp 4 \
+  -kernel /usr/lib/u-boot/qemu-riscv64_smode/uboot.elf \
+  -device virtio-net-device,netdev=eth0 \
+  -netdev user,id=eth0,hostfwd=tcp::2222-:22 \
+  -device virtio-rng-pci \
+  -drive file=ubuntu-24.04-riscv64.img,format=raw,if=virtio
+```
+
+**参数说明**
+
+| 参数 | 说明 |
+|------|------|
+| `-machine virt` | 虚拟硬件平台 |
+| `-cpu rv64gc` | 启用 RV64GC（通用计算扩展） |
+| `-nographic` | 无图形界面，串口输出到终端 |
+| `-m 4G` | 分配 4GB 内存 |
+| `-smp 4` | 4 个 CPU 核心 |
+| `-kernel` | 使用 U-Boot 引导 |
+| `-netdev hostfwd` | 端口转发：SSH 访问 2222 → 虚拟机 22 |
+| `-drive` | 虚拟机磁盘镜像 |
+
+**SSH 连接虚拟机**
+
+虚拟机启动后，在另一个终端中通过 SSH 连接：
+
+```bash
+# 账号 ubuntu，密码 ubuntu（首次登录需修改密码）
+ssh -p 2222 ubuntu@localhost
+
+# 首次登录后安装编译工具
+sudo apt-get update
+sudo apt-get install gcc gdb
+```
+
+**在 WSL 中编译**
+
+```bash
+# 1. 编译 ToyC 源代码 → 汇编
 ./compiler < input.c > input.s
+
+# 2. 将汇编文件和运行时库拷贝到虚拟机
+scp -P 2222 input.s libtoyc.a ubuntu@localhost:~/
 ```
 
-链接后，使用 QEMU 运行 RV64 程序，并把测试数据传给被编译程序的标准输入：
+**在 QEMU 虚拟机中链接运行**
 
 ```bash
-riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
-  -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
-printf '42\n' | qemu-riscv64 ./input > input.out
+# 3. SSH 登录虚拟机
+ssh -p 2222 ubuntu@localhost
+
+# 4. 链接汇编 + 运行时库 → 可执行文件
+riscv64-linux-gnu-gcc -march=rv64gc -mabi=lp64d \
+  -nostdlib -static input.s libtoyc.a -o input
+
+# 5. 运行（input.in 为标准输入数据）
+./input < input.in > result.out
 ```
 
-:::info[文件命名约定]
-**`*.c` vs `*.in` vs `*.out`**：`*.c` 是 ToyC 源文件，由**编译器**读取；`*.in` 是 ToyC 程序运行时的标准输入数据（例如 `getint()` 要读取的数字），由**被编译出的可执行文件**读取；`*.out` 是 ToyC 程序运行时的标准输出结果（例如 `putint()` 写入的内容），是助教评测时实际比对的文件。三者不要混淆。
+:::info[qemu-user vs qemu-system]
+**qemu-user**（如 `qemu-riscv64`）：直接运行单个静态 ELF 文件，适合快速测试编译产物。
+**qemu-system-riscv64**：启动完整虚拟机，运行带有文件系统和网络功能的 Linux 环境，适合完整开发调试。
 :::
-
-QEMU 用户态模式适合运行单个 RV64 Linux/静态 ELF；如果课程环境要求完整虚拟机，再使用 `qemu-system-riscv64` 配合课程提供的内核、设备树和磁盘镜像，不能只凭一个裸 ELF 启动完整系统。
-
-### 7. 可选优化参数
-
-编译器本身从标准输入读取 ToyC 源代码，生成汇编到标准输出。**可执行文件统一命名为 `compiler`**。建议把 ToyC 源文件命名为 `*.c`，把运行时数据命名为 `*.in`，把汇编命名为 `*.s`，把链接后的可执行文件命名为无后缀名（如 `input`），把程序运行后的标准输出命名为 `*.out`，与助教评测脚本约定保持一致：
-
-```bash
-./compiler < input.c > input.s
-```
-
-链接后，使用 QEMU 运行 RV64 程序，并把测试数据传给被编译程序的标准输入：
-
-```bash
-riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
-  -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
-printf '42\n' | qemu-riscv64 ./input > input.out
-```
-
-:::info[文件命名约定]
-**`*.c` vs `*.in` vs `*.out`**：`*.c` 是 ToyC 源文件，由**编译器**读取；`*.in` 是 ToyC 程序运行时的标准输入数据（例如 `getint()` 要读取的数字），由**被编译出的可执行文件**读取；`*.out` 是 ToyC 程序运行时的标准输出结果（例如 `putint()` 写入的内容），是助教评测时实际比对的文件。三者不要混淆。
-:::
-
-QEMU 用户态模式适合运行单个 RV64 Linux/静态 ELF；如果课程环境要求完整虚拟机，再使用 `qemu-system-riscv64` 配合课程提供的内核、设备树和磁盘镜像，不能只凭一个裸 ELF 启动完整系统。
 
 ## 三、目录约定
 
 仓库采用**单根布局**：所有实验共享同一个编译器源码和构建脚本，评测机通过调用不同命令行接口（`--dump-tokens` / `--check-ast` / `--dump-asm` 等）区分实验阶段。
 
 ```text
-ToyC/
+toyc-cpp/                    # 仓库目录名由你决定，此处以 toyc-cpp 为例
 ├── CMakeLists.txt           # 或 Makefile / pom.xml / build.gradle（推荐 CMake）
 ├── src/                     # 全部实验的源代码（含词法、语法、IR、目标代码、优化）
 │   ├── lexer/
@@ -579,16 +628,15 @@ ToyC/
 │   └── optim/
 ├── third_party/             # 第三方依赖与下载的参考文档
 │   └── toyc/libtoyc.a       # 运行时库（课程组提供，本地调试用）
-├── README.md                # 构建、运行、参数说明
-└── group.csv                # 小组名单
+├── README.md                # 简要说明编译器架构
 ```
 
 要点：
 
 - 构建脚本放在**仓库根目录**，`src/` 下按模块划分子目录，不再为每个实验单独建目录；
 - 不需要在仓库中维护 `tests/` 目录，评测机自带测试集；
-- 源码仓库目录名由你决定（教程中统一用 `your_compiler_name` 作为占位，如 `toyc-cpp`、`toyc-java`、`toyc-ocaml`），但**编译产物（可执行文件）必须统一命名为 `compiler`**，评测平台以这个名字调用；
-- 运行时库 `libtoyc.a` 由评测平台提供，不要提交到仓库；本地调试时放在 `third_party/toyc/libtoyc.a` 即可。
+- 源码仓库目录名由你决定（如 `toyc-cpp`、`toyc-java`、`toyc-rust`或者一些独树一帜的命名都可），但**编译产物（可执行文件）必须统一命名为 `compiler`**，评测平台以这个名字调用；
+- 运行时库 `libtoyc.a` 由评测平台提供，不要提交到仓库；本地调试时建议放在 `third_party/toyc/libtoyc.a` 。
 
 ## 附：参考文档下载
 
@@ -604,7 +652,8 @@ ToyC/
 ```bash
 mkdir -p third_party/docs
 # SITE_BASE_URL 是站点根 URL，未设置时使用本地开发服务器
-# 部署到 GitHub Pages 后通常设置为 https://<username>.github.io
+# 部署到 GitHub Pages 后设置为 https://<username>.github.io
+# 目前根 URL 为 https://lightsmilew.github.io
 curl -L -o third_party/docs/QEMU本地调试指南.pdf \
     "${SITE_BASE_URL:-http://localhost:3000}/compiler-principles/pdf/QEMU本地调试指南.pdf"
 curl -L -o third_party/docs/SysY2022语言定义-V1.pdf \
@@ -638,7 +687,11 @@ EOF
 
 | 现象 | 原因 | 处理 |
 | --- | --- | --- |
-| `flex: command not found` | 未安装或未加入 PATH | 重装并在 `~/.bashrc` 中导出 PATH |
-| 生成中文乱码 | 终端编码与文件编码不一致 | 统一使用 UTF-8，避免 BOM |
-| `Permission denied` 运行脚本 | 脚本没有可执行位 | `chmod +x build.sh` |
-| Windows 下换行符导致解析失败 | CRLF 混入输入 | 配置 `.gitattributes` 强制 LF |
+| `CMake Error: Could not find...` | Flex/Bison/ANTLR 未安装或路径不对 | 确认已安装并在 CMakeLists.txt 中正确配置路径 |
+| `make: *** No targets specified and no Makefile found` | 未运行 CMake 生成构建文件 | 先 `cmake -S . -B build`，再 `make` |
+| `cannot find -ltoyc` / 链接失败 | `libtoyc.a` 未编译或路径错误 | 确认已编译运行时库，并在链接命令中添加 `-L` 路径 |
+| `qemu-riscv64: Unable to find the program` | 可执行文件格式不对或缺少执行权限 | 用 `file` 检查是否为 ELF，确认 `chmod +x` |
+| `./compiler: No such file or directory` | 编译未成功或未在正确目录 | 检查 `cmake --build build` 是否成功 |
+| `result.out` 与 `input.out` 不一致 | 换行符差异（LF vs CRLF）或输出格式问题 | 确保源文件和输出都用 LF 换行，检查是否有多余空格/换行 |
+| ANTLR 生成代码编译失败 | 未正确配置 generated-sources 目录 | 确认 Maven/Gradle 已配置 antlr plugin，或手动添加 `target/generated-sources` 到 include 路径 |
+| Cargo/Rust 依赖下载超时 | 国内网络问题 | 配置 Cargo 镜像源 `source .cargo/config.toml` |

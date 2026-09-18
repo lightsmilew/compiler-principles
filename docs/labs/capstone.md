@@ -128,8 +128,34 @@ ToyC 源文件统一使用 `.c` 后缀（与 C 语言一致，便于工具链识
 ./compiler --dump-asm < input.c > input.s
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
   -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
-./input < runtime.in > input.out        # input.out 是 ToyC 程序的 stdout，是评测对比对象
+./input < input.in > result.out        # result.out 是 ToyC 程序的 stdout，与 input.out 对比
 ```
+
+**完整虚拟机开发环境**
+
+需要完整 Linux 环境时，使用 qemu-system 启动虚拟机：
+
+```bash
+qemu-system-riscv64 \
+  -machine virt \
+  -cpu rv64gc \
+  -nographic -m 4G -smp 4 \
+  -kernel /usr/lib/u-boot/qemu-riscv64_smode/uboot.elf \
+  -device virtio-net-device,netdev=eth0 \
+  -netdev user,id=eth0,hostfwd=tcp::2222-:22 \
+  -device virtio-rng-pci \
+  -drive file=ubuntu-24.04-riscv64.img,format=raw,if=virtio
+
+# SSH 连接后使用 Linux 工具链
+ssh -p 2222 ubuntu@localhost
+# 首次登录后安装编译工具
+sudo apt-get update
+sudo apt-get install gcc gdb
+riscv64-linux-gnu-gcc -march=rv64gc -mabi=lp64d \
+  -nostdlib -static input.s libtoyc.a -o input
+./input < input.in
+```
+:::
 
 :::info[关于文件类型区分]
 **`*.c` vs `*.in` vs `*.out` 三者不要混淆**：
@@ -151,7 +177,7 @@ riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
 ./compiler --dump-asm < input.c > input.s
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
   -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
-./input < runtime.in > input.out        # input.out 是 ToyC 程序 stdout，是评测对比对象
+./input < input.in > result.out        # result.out 是 ToyC 程序 stdout，与 input.out 对比
 ```
 
 :::info

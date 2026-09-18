@@ -18,7 +18,7 @@ function Hero() {
             编译原理实验
           </Heading>
           <p className={styles.subtitle}>
-            以一门语言 <strong>ToyC</strong> 为主线，从词法分析一路做到目标代码生成。
+            以语言 <strong>ToyC</strong> 为主线，从词法分析一路做到目标代码生成。
             六个递进式实验，最终得到一个完整、可运行的编译器。
           </p>
           <div className={styles.actions}>
@@ -47,7 +47,7 @@ function LabsSection() {
             实验内容
           </Heading>
           <p className={styles.sectionDesc}>
-            六个递进式实验加综合课程设计，点击任意卡片进入对应文档。
+            实验重点在于产生正确的目标代码，对优化内容感兴趣的同学可自行探索，文档给出了部分优化实现思路。
           </p>
         </div>
         <LabGrid />

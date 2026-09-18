@@ -34,6 +34,10 @@ int main() {
 
 目标代码必须是 RISC-V64GC，并使用 ToyC 运行时库进行静态链接。
 
+**方式一：qemu-user 快速验证**
+
+适用于运行单个静态 ELF 文件：
+
 ```bash
 # 1. 编译 ToyC 源代码 → 汇编
 ./compiler < input.c > input.s
@@ -42,12 +46,44 @@ int main() {
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
   -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
 
-# 3. 运行（QEMU 用户态）
-#    输入数据放在 input.in，评测脚本自动重定向标准输入
-qemu-riscv64 ./input < input.in
+# 3. 运行（qemu-user）
+./input < input.in
 ```
 
-脚本中的关键链接参数：
+**方式二：qemu-system 完整虚拟机**
+
+需要完整的 Linux 开发环境时，启动 QEMU 虚拟机：
+
+```bash
+# 启动虚拟机
+qemu-system-riscv64 \
+  -machine virt \
+  -cpu rv64gc \
+  -nographic -m 4G -smp 4 \
+  -kernel /usr/lib/u-boot/qemu-riscv64_smode/uboot.elf \
+  -device virtio-net-device,netdev=eth0 \
+  -netdev user,id=eth0,hostfwd=tcp::2222-:22 \
+  -device virtio-rng-pci \
+  -drive file=ubuntu-24.04-riscv64.img,format=raw,if=virtio
+```
+
+SSH 连接后，在虚拟机内编译运行：
+
+```bash
+# 账号 ubuntu，密码 ubuntu（首次登录需修改密码）
+ssh -p 2222 ubuntu@localhost
+
+# 首次登录后安装编译工具
+sudo apt-get update
+sudo apt-get install gcc gdb
+
+# 编译运行
+riscv64-linux-gnu-gcc -march=rv64gc -mabi=lp64d \
+  -nostdlib -static input.s libtoyc.a -o input
+./input < input.in
+```
+
+**脚本中的关键链接参数**：
 
 | 参数 | 说明 |
 |---|---|

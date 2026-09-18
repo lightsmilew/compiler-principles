@@ -17,7 +17,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: '实验指南',
-      items: ['guide/environment', 'guide/workflow', 'guide/report', 'guide/submission'],
+      items: ['guide/environment', 'guide/workflow', 'guide/report', 'guide/grading', 'guide/submission'],
     },
     {
       type: 'category',

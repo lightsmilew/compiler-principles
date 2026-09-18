@@ -105,9 +105,8 @@ cmake --build build
 toyc-cpp/           # 仓库目录名由你决定，此处以 toyc-cpp 为例
 ├── CMakeLists.txt   # 或 Makefile / pom.xml / dune-project
 ├── src/
-├── third_party/toyc/libtoyc.a   # 评测平台提供
-├── README.md
-└── group.csv
+├── third_party/toyc/libtoyc.a   # 评测平台提供（这一部分实验可以不需要静态链接库）
+├── README.md                    # 简要说明你的词法分析器实现思路
 ```
 
 报告中应包含正则规则、DFA 状态图、Token 数据结构、错误恢复策略和自测结果。
