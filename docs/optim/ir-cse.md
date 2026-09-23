@@ -65,16 +65,34 @@ AE_out[B]  = ∩ AE_in[P]                       for all P in successors[B]
 
 不动点算法：
 
-```cpp
-bool changed = true;
-while (changed) {
-    changed = false;
-    for (auto& B : rpo(cfg)) {
-        auto new_out = AE_in[B];
-        for (auto* S : B.successors) new_out &= AE_in[S];
-        if (new_out != AE_out[B]) { AE_out[B] = new_out; changed = true; }
-    }
-}
+**算法 · 基于可用表达式的 CSE（Available-Expressions CSE）**
+
+**输入（Input）：** 函数 CFG。
+**输出（Output）：** 消除重复表达式后的 IR。
+
+```
+ 1: cse(func):
+ 2:     for each block B in func do AE_in[B] = ∅;  AE_out[B] = U; end for   // 初值：入口空、出口全集
+ 3:     repeat
+ 4:         changed = false;
+ 5:         for each block B in reversePostOrder(func) do
+ 6:             new_out = U;                                    // 交集初值取全集 U
+ 7:             for each S in B.successors do
+ 8:                 new_out = new_out ∩ AE_in[S];               // meet：交集
+ 9:             end for
+10:             new_in = AE_gen[B] ∪ (new_out − AE_kill[B]);    // transfer 函数
+11:             if new_in != AE_in[B] or new_out != AE_out[B] then
+12:                 AE_in[B] = new_in;  AE_out[B] = new_out;  changed = true;
+13:             end if
+14:         end for
+15:     until not changed
+16:     for each block B in func do                             // 应用：删除冗余表达式
+17:         for each pure instruction I in B do
+18:             if expr(I) ∈ AE_in[B] then
+19:                 replaceAllUsesWith(I.result, availableExpr(I));  delete(I);
+20:             end if
+21:         end for
+22:     end for
 ```
 
 对每条表达式指令 `I`，若 `expr(I) ∈ AE_in[块 B]`，则说明 `I` 在支配路径上已经求过值——可以删除 `I`，并把后续 use 替换为之前的 SSA 值。
@@ -83,7 +101,7 @@ while (changed) {
 flowchart TD
   Init[初始化 AE_out 为空集] --> Loop{changed?}
   Loop -- 是 --> Visit[按 RPO 遍历基本块]
-  Visit --> Meet[new_out = ∩ AE_in[后继]]
+  Visit --> Meet["new_out = 各后继 AE_in 的交集"]
   Meet --> Trans[new_in = gen ∪ new_out - kill]
   Trans --> Update{集合有变化?}
   Update -- 是 --> Flag[changed = true] --> Loop

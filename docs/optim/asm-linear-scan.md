@@ -13,25 +13,33 @@ description: 按程序顺序扫描活跃区间，遇到冲突就把多余的值 
 
 ## 一、伪代码
 
-```text
-intervals = sort_by_start(build_live_intervals(assembly))
-active = []                                // 当前活跃的区间集合
-free_registers = all_allocatable_registers
+**算法 · 线性扫描寄存器分配（Linear Scan Allocation）**
 
-for interval in intervals:
-    expire_old_intervals(active, interval.start)
-    if not free_registers.empty():
-        reg = free_registers.pop()
-        assign(interval, reg)
-        add_to_active(active, interval)
-    else:
-        spill = interval_with_latest_end(active ∪ {interval})
-        if spill == interval:
-            assign_stack_slot(interval)              // 当前区间 spill
-        else:
-            assign_register(interval, spill.reg)     // 当前区间用寄存器
-            assign_stack_slot(spill)                  // 把晚结束的 spill
-            replace(active, spill, interval)
+**输入（Input）：** 汇编代码与全部活跃区间、可用物理寄存器。
+**输出（Output）：** 每个区间分配到的物理寄存器或栈槽。
+
+```
+ 1: linearScan(assembly):
+ 2:     intervals = sortByStart(buildLiveIntervals(assembly));
+ 3:     active = [];                                     // 当前活跃区间，按 end 升序
+ 4:     free_registers = allAllocatableRegisters();
+ 5:     for each interval in intervals do
+ 6:         expireOldIntervals(active, interval.start);  // 回收已结束区间让出的寄存器
+ 7:         if not free_registers.empty() then
+ 8:             reg = free_registers.pop();
+ 9:             assign(interval, reg);
+10:             insertSortedByEnd(active, interval);
+11:         else
+12:             spill = intervalWithLatestEnd(active ∪ { interval });   // 挑 end 最晚者
+13:             if spill == interval then
+14:                 assignStackSlot(interval);             // 当前区间自己 spill
+15:             else
+16:                 assignRegister(interval, spill.reg);  // 夺走候选的寄存器
+17:                 assignStackSlot(spill);
+18:                 replace(active, spill, interval);
+19:             end if
+20:         end if
+21:     end for
 ```
 
 两个关键操作：

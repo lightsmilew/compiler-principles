@@ -7,7 +7,11 @@ description: 详细说明 ToyC AST 到 LLVM IR 的转换方法、IR 设计和控
 
 # 第三部分 · 中间代码生成
 
-本部分只要求完成设计和实验报告，不要求提交独立的可编译程序。语法分析产生 AST 后，可以先经过选做的语义分析，再进入 LLVM IR 生成。最终报告必须说明 IR 的设计思路、数据结构、输出格式，以及每一种 ToyC 语法成分如何从 AST 转换为 LLVM IR。
+本部分只要求完成**设计和实验报告**，不要求提交独立的可编译程序。语法分析产生 AST 后，可以先经过选做的语义分析，再进入 LLVM IR 生成。最终报告必须说明 IR 的设计思路、数据结构、输出格式，以及每一种 ToyC 语法成分如何从 AST 转换为 LLVM IR。
+
+:::tip[本节示例基于 LLVM IR]
+下面所有示例都用 LLVM IR 编写，方便对照标准写法。这只是**参考**：你也可以设计并实现自己的**三地址码**（例如四元式 `(op, arg1, arg2, result)`）作为中间表示，只要在报告中说明它的数据结构，以及它如何降低到 RISC-V64GC 即可。
+:::
 
 ## 一、IR 的作用与选择
 
@@ -15,14 +19,21 @@ AST 适合表达源语言结构，但不适合直接做机器无关优化或指�
 
 ```mermaid
 flowchart LR
-    A[AST] --> B[LLVM IR 生成]
-    B --> C[LLVM 基本块与 SSA]
-    C --> D[代码优化]
-    D --> E[目标代码生成]
-    E --> F[RISC-V64GC]
+  A[AST] --> B[LLVM IR 生成]
+  B --> C[LLVM 基本块与 SSA]
+  C --> D[代码优化]
+  D --> E[目标代码生成]
+  E --> F[RISC-V64GC]
 ```
 
+**为什么不让 AST 直接生成汇编？** 因为这样每加一条优化、每换一个目标机器都要重写前端。引入 IR 后，"前端 → IR"只写一次，"IR 优化"是通用的，"IR → 目标机器"可以针对不同机器分别实现，三者解耦。
+
 本部分以 **LLVM IR 作为主要示例**，也可以使用自定义 IR；此时必须在报告中说明模块、函数、基本块、值、指令和控制流边的数据结构，以及如何降低到 RISC-V64GC。
+
+| 选择 | 优点 | 代价 |
+| --- | --- | --- |
+| LLVM IR | 现成的 SSA、优化器和工具链；语法规范 | 需要理解 SSA、phi 等概念 |
+| 自定义 IR | 结构简单、可控 | 需要自己设计并实现全部优化 |
 
 ## 二、LLVM IR 格式
 
@@ -34,16 +45,18 @@ entry:
 }
 ```
 
-其中 `Module` 包含函数，函数包含基本块，基本块包含按顺序执行的指令；`%a`、`%b`
-和 `%sum` 是 SSA 值，每个 SSA 值只定义一次。ToyC 的变量声明、赋值和表达式可以先
-降低到 `alloca`、`load`、`store`，再通过 mem2reg 形成 SSA；条件和循环使用基本块、
-条件分支和 `phi` 指令表达。
+其中 `Module` 包含函数，函数包含基本块，基本块包含按顺序执行的指令；`%a`、`%b` 和 `%sum` 是 SSA 值，**每个 SSA 值只定义一次**。ToyC 的变量声明、赋值和表达式可以先降低到 `alloca`、`load`、`store`，再通过 mem2reg 形成 SSA；条件和循环使用基本块、条件分支和 `phi` 指令表达。
 
-每个 SSA 临时值只能由一条指令定义；跳转目标使用基本块标签；函数调用必须保留参数顺序和副作用顺序。
+关键约束：
+
+- 每个 SSA 临时值只能由一条指令定义；
+- 跳转目标使用基本块标签；
+- 每个基本块必须以终结指令（`br` / `ret`）结尾；
+- 函数调用必须保留参数顺序和副作用顺序。
 
 ### SSA 在本实验中的使用
 
-SSA（Static Single Assignment，静态单赋值）要求每个 SSA 名称在一个函数中只定义一次。它不限制 ToyC 源变量的赋值次数，而是把每次赋值改成新的 SSA 值：
+SSA（Static Single Assignment，静态单赋值）要求每个 SSA 名称在一个函数中只定义一次。它**不限制 ToyC 源变量的赋值次数**，而是把每次赋值改写成一个新的 SSA 值：
 
 ```c
 x = a + 1;
@@ -55,7 +68,7 @@ x = x * 2;
 %x2 = mul i32 %x1, 2
 ```
 
-当控制流汇合时使用 `phi`：
+当控制流汇合时，用 `phi` 指令按"从哪条边进来"选择值：
 
 ```c
 if (cond) x = 1;
@@ -64,73 +77,80 @@ return x;
 ```
 
 ```llvm
-br i1 %cond, label %then, label %else
+    br i1 %cond, label %then, label %else
 then:
     br label %join
 else:
     br label %join
 join:
-    %x = phi i32 [ 1, %then ], [ 2, %else ]
+    %x = phi i32 [ 1, %then ], [ 2, %else ]   ; 来自 then 取 1，来自 else 取 2
     ret i32 %x
 ```
 
-建议先用 `alloca`、`load`、`store` 表示 ToyC 局部变量，再选做地执行 mem2reg 转换为 SSA。这样实现顺序更简单：先保证地址和控制流正确，再处理 `phi` 插入。
+```mermaid
+flowchart TD
+  E[entry] -->|cond 真| TH[then]
+  E -->|cond 假| EL[else]
+  TH --> J["join: phi 选值"]
+  EL --> J
+  J --> R["ret %x"]
+```
+
+:::tip[推荐实现顺序]
+建议先用 `alloca`、`load`、`store` 表示 ToyC 局部变量，再选做地执行 mem2reg 转换为 SSA。这样实现顺序更简单：**先保证地址与控制流正确，再处理 `phi` 插入**。
+:::
 
 ## 三、符号表与作用域
 
-### 嵌套作用域的数据结构
+### 3.1 数据结构
 
-ToyC 允许在语句块 `{ ... }` 中声明局部变量，内层可以遮蔽外层同名变量。生成 IR 时需要维护**嵌套作用域栈**，每进入一个块压入新层，退出时弹出：
+ToyC 允许在语句块中声明局部变量，内层可以遮蔽外层同名变量。生成 IR 时需要维护**嵌套作用域栈**，每进入一个块压入新层，退出时弹出：
 
-```text
+```
 SymbolTable {
-    scopes: List[Dict[str, Symbol]]   // 嵌套作用域栈
-    next_address: int                 // 下一个栈槽偏移
+    scopes: List<Map<string, Symbol>>   // 嵌套作用域栈 / nested scope stack
+    next_offset: int                    // 下一个栈槽偏移
 }
 
 Symbol {
-    name: str
-    address: Value                     // alloca 产生的地址（alloca/load/store 模式）
-    // 或者：value: Value             // SSA 模式（mem2reg 后）
+    name: string
+    address: Value                      // alloca 产生的地址（alloca/load/store 模式）
+    // 或者：value: Value               // SSA 模式（mem2reg 后）
     is_constant: bool
-    scope_level: int                  // 所在作用域深度
-}
-
-CodegenContext {
-    module: Module
-    current_function: Function?
-    current_block: BasicBlock
-    symbol_table: SymbolTable
-    loop_stack: List[LoopContext]     // (continue_block, break_block)
-    next_ssa_id: int
+    scope_level: int                    // 所在作用域深度
 }
 ```
 
-```text
-push_scope():
-    symbol_table.scopes.append({})
+### 3.2 作用域操作
 
-pop_scope():
-    symbol_table.scopes.pop()
+**算法 1 · 作用域栈操作（Scope Stack Operations）**
 
-declare(name, symbol):
-    symbol_table.scopes.top[name] = symbol
+**输入（Input）：** 当前作用域栈 `scopes`、名称 `name`。
+**输出（Output）：** 命中的符号，或报告"未声明"。
 
-lookup(name):
-    for scope in reversed(symbol_table.scopes):
-        if name in scope: return scope[name]
-    error: "未声明的标识符: " + name
+```
+ 1: pushScope():  scopes.push({});                    // 进入块：压入新层
+ 2: popScope():   scopes.pop();                       // 离开块：弹出
+ 3:
+ 4: declare(name, symbol):
+ 5:     scopes.top[name] = symbol;                     // 在当前层登记
+ 6:
+ 7: lookup(name):
+ 8:     for scope in reversed(scopes) do                // 从栈顶向下查找
+ 9:         if name in scope then return scope[name]; end if
+10:     end for
+11:     error("未声明的标识符: " + name);                // 都没找到 -> 报错
 ```
 
-### 内层遮蔽外层的处理
+### 3.3 内层遮蔽外层的处理
 
 ```c
 int x = 1;
 {
     int x = 2;       // 遮蔽外层 x
-    print(x);         // 引用内层 x = 2
+    putint(x);        // 引用内层 x = 2
 }
-print(x);             // 引用外层 x = 1
+putint(x);            // 引用外层 x = 1
 ```
 
 IR 生成时内层和外层各有一个 `alloca`，`lookup("x")` 从栈顶向下查找，总是找到最近声明的那个：
@@ -139,134 +159,146 @@ IR 生成时内层和外层各有一个 `alloca`，`lookup("x")` 从栈顶向下
 %x.outer = alloca i32
 store i32 1, ptr %x.outer
 ; 进入内层块
-%x.inner = alloca i32          ; 新 alloca
+%x.inner = alloca i32            ; 新的 alloca
 store i32 2, ptr %x.inner
-%v1 = load i32, ptr %x.inner   ; → 2
-call @print(i32 %v1)
-; 退出内层块（x.inner 超出作用域，可选保留或重用）
-%v2 = load i32, ptr %x.outer  ; → 1
-call @print(i32 %v2)
+%v1 = load i32, ptr %x.inner     ; -> 2
+call void @putint(i32 %v1)
+; 退出内层块（x.inner 超出作用域）
+%v2 = load i32, ptr %x.outer     ; -> 1
+call void @putint(i32 %v2)
 ```
 
 ## 四、AST 到 LLVM IR 的转换逻辑
 
-IR 生成器递归访问 AST，维护函数级上下文：
+IR 生成器递归访问 AST，并维护一个函数级的上下文：
 
-```text
+```
 CodegenContext {
     module: Module
     current_function: Function?
     current_block: BasicBlock
     symbol_table: SymbolTable
-    loop_stack: List[LoopContext]
+    loop_stack: List<LoopContext>     // (continue_block, break_block)
     next_ssa_id: int
 }
+
+LoopContext { head: BasicBlock, exit: BasicBlock }
 ```
 
-整体流程：
+**算法 2 · 程序整体生成（emitProgram）**
 
-1. 创建 LLVM Module，登记目标三元组和外部函数声明；
-2. 为每个函数创建 `Function`、入口 `BasicBlock` 和形参映射；
-3. 为局部变量创建 `alloca`，再访问初始化表达式并生成 `store`；
-4. 表达式访问器返回 LLVM `Value`，必要时用 `load` 把内存地址转换为整数值；
-5. 普通表达式按子树顺序产生 SSA 指令；条件表达式接收 true/false 两个目标基本块；
-6. 语句访问器负责创建基本块和终结指令 `br`/`ret`；
-7. 循环通过 `loop_stack` 解析 break/continue；
-8. 验证每个基本块有正确的终结指令，并输出 LLVM IR。
+**输入（Input）：** 程序 AST 与已选定的目标三元组。
+**输出（Output）：** 一个完整的 LLVM `Module`。
 
-```text
-emit_program(AST):
-    module = new Module("toyir")
-    module.target_triple = "riscv64-unknown-elf"
-    declare_external_functions(module)
-    for func in AST.functions:
-        emit_function(func, module)
-    return module
-
-emit_function(func_ast, module):
-    func = module.add_function(func_ast.name, func_ast.return_type, func_ast.params)
-    ctx.current_function = func
-    ctx.current_block = func.new_block("entry")
-    ctx.symbol_table.push_scope()
-    bind_parameters(func_ast.params, func.arguments)
-    emit_declarations(func_ast.body)
-    emit_stmt(func_ast.body)
-    emit_implicit_return_if_allowed(func_ast.return_type)
-    ctx.symbol_table.pop_scope()
-    verify(func)
+```
+ 1: emitProgram(ast):
+ 2:     module = new Module("toyir");
+ 3:     module.target_triple = "riscv64-unknown-elf";   // 目标平台 / target
+ 4:     declareExternalFunctions(module);                // 见第七节
+ 5:     emitGlobals(ast.globals, module);                // 全局变量 / global variables
+ 6:     for each func in ast.functions do
+ 7:         emitFunction(func, module);
+ 8:     end for
+ 9:     return module;
 ```
 
-### 分支目标的两种策略
+**算法 3 · 函数生成（emitFunction）**
 
-LLVM IR 的分支目标必须在基本块创建后确定。有两种实现策略：
+**输入（Input）：** 函数 AST 节点 `func_ast` 与所属 `module`。
+**输出（Output）：** 加入 module 的 LLVM 函数定义。
 
-**策略一（推荐）：直接绑定**——先创建所有目标基本块，再生成跳转指令，目标块已存在：
-
-```text
-emit_stmt(If(cond, then_stmt, else_stmt)):
-    then_lbl = new_label(); else_lbl = new_label(); end = new_label()
-    emit_cond(cond, then_lbl, else_lbl)   ; 此时 then_lbl/else_lbl 已存在
-    emit_label(then_lbl); emit_stmt(then_stmt); emit_br(end)
-    emit_label(else_lbl)
-    if else_stmt: emit_stmt(else_stmt)
-    emit_br(end)
-    emit_label(end)
+```
+ 1: emitFunction(func_ast, module):
+ 2:     fn = module.addFunction(func_ast.name, func_ast.return_type, func_ast.params);
+ 3:     ctx.current_function = fn;
+ 4:     ctx.current_block = fn.newBlock("entry");
+ 5:     ctx.symbol_table.pushScope();
+ 6:     bindParameters(func_ast.params, fn.arguments);   // 形参 -> alloca + store
+ 7:     emitStmt(func_ast.body);                          // 递归生成函数体
+ 8:     if func_ast.return_type == int then               // 保证基本块有终结指令
+ 9:         emitImplicitReturn(fn);                        // 语义检查保证所有路径有 return
+10:     end if
+11:     ctx.symbol_table.popScope();
+12:     verify(fn);                                        // 检查每个块都有终结指令
 ```
 
-**策略二（回填）**——先生成条件跳转，跳转指令的目标暂时未知，记录下来待目标块创建后填入（适合不想提前知道所有块名的实现）：
+### 4.1 分支目标的两种策略
 
-```text
-pending_branches = []   ; (branch_instruction, which_target_is_pending)
+LLVM IR 的分支目标必须在基本块创建后确定，因此有两种实现策略。
 
-create_pending_br(cond_val, true_target_name, false_target_name):
-    br_inst = emit_cond_jump(cond_val)    ; 目标暂时填 null
-    pending_branches.append((br_inst, true_target_name, false_target_name))
+**策略一（推荐）：直接绑定**——先创建所有目标基本块，再生成跳转指令，此时目标块已存在：
 
-fill_target(label_name, block):
+**算法 4 · if-else 生成（直接绑定策略，Direct Binding）**
+
+**输入（Input）：** `If` 节点的条件、then 语句、可选的 else 语句。
+**输出（Output）：** 带基本块与终结指令的 IR。
+
+```
+ 1: emitStmt(If(cond, then_stmt, else_stmt)):
+ 2:     then_lbl = newLabel();  else_lbl = newLabel();  end = newLabel();
+ 3:     emitCond(cond, then_lbl, else_lbl);        // 条件求值并跳转，见算法 8
+ 4:     emitLabel(then_lbl);  emitStmt(then_stmt);  emitBr(end);
+ 5:     emitLabel(else_lbl);
+ 6:     if else_stmt != none then emitStmt(else_stmt); end if
+ 7:     emitBr(end);
+ 8:     emitLabel(end);
+```
+
+对应控制流：
+
+```mermaid
+flowchart TD
+  C["cond 求值"] -->|真| TH["then 分支"]
+  C -->|假| EL["else 分支"]
+  TH --> E["end"]
+  EL --> E
+```
+
+**策略二（回填）**——先生成条件跳转，跳转目标暂时未知，记录下来待目标块创建后填入：
+
+```
+pending_branches = []   // (branch_instruction, true_target_name, false_target_name)
+
+createPendingBr(cond_val, true_name, false_name):
+    br_inst = emitCondJump(cond_val);              // 目标暂时填 null
+    pending_branches.append((br_inst, true_name, false_name));
+
+fillTarget(label_name, block):                     // 目标块创建后调用
     for (br_inst, true_t, false_t) in pending_branches:
-        if br_inst.true_target == label_name: br_inst.true_target = block
-        if br_inst.false_target == label_name: br_inst.false_target = block
+        if true_t  == label_name: br_inst.true_target  = block;
+        if false_t == label_name: br_inst.false_target = block;
 ```
 
-推荐使用策略一，代码更直观。
+推荐使用**策略一**，代码更直观。
 
 ## 五、表达式转换
 
-### 1. 整数常量
+表达式访问器 `emit_expr` 返回一个 LLVM `Value`；短路逻辑等无法直接产生值的情况改用 `emit_cond`（接收真/假两个目标块，不返回值）。
 
-`NUMBER` 节点携带整数值，不需要生成加载指令：
+**算法 5 · 表达式生成的通用结构（emit_expr）**
 
-```text
-emit_expr(Number(n)): return Constant(n, i32)
+**输入（Input）：** 表达式 AST 节点。
+**输出（Output）：** 表示该表达式结果的 LLVM `Value`。
+
+```
+ 1: emitExpr(e):
+ 2:     match e:
+ 3:         Number(n):            return Constant(n, i32);        // 常量，无需加载
+ 4:         Variable(name):       return loadVar(lookup(name));   // 从内存/SSA 取值
+ 5:         Unary(op, x):         return emitUnary(op, emitExpr(x));
+ 6:         Binary(op, l, r):     return emitBinary(op, emitExpr(l), emitExpr(r));
+ 7:         Relation(l, op, r):   return zext(emitICmp(op, emitExpr(l), emitExpr(r)));  // i1 -> i32
+ 8:         Call(name, args):     return emitCall(name, map(emitExpr, args));
+ 9:     end match
 ```
 
-```llvm
-%x = alloca i32
-store i32 42, ptr %x
+### 5.1 一元表达式
+
 ```
-
-### 2. 变量引用
-
-变量引用必须在符号表中查找。引用返回变量对应的 SSA 地址值（alloca 模式）或 SSA 值（SSA 模式）：
-
-```c
-return x;
-```
-
-```llvm
-%addr = load ptr, ptr @x_addr   ; 若是全局变量
-%value = load i32, ptr %addr
-ret i32 %value
-```
-
-### 3. 一元表达式
-
-```text
-emit_expr(Unary(op, operand)):
-    value = emit_expr(operand)
-    if op == '+': return value
-    if op == '-': return emit(neg, value)
-    if op == '!': return emit(xor, value, 1)
+emitUnary(op, v):
+    if op == '+': return v;                       // 不变 / identity
+    if op == '-': return emit(neg, v);
+    if op == '!': return emit(xor, v, 1);         // 逻辑非：0/1 取反
 ```
 
 ```llvm
@@ -276,62 +308,65 @@ emit_expr(Unary(op, operand)):
 %t2 = sub i32 0, %t1
 ```
 
-### 4. 算术表达式
+### 5.2 关系表达式
 
-```text
-emit_expr(Binary(op, left, right)):
-    lv = emit_expr(left); rv = emit_expr(right)
-    return emit_llvm_binary(op, lv, rv)
-```
-
-### 5. 关系表达式
-
-关系运算结果为 0 或 1。`icmp` 返回 i1，需要用 `zext` 扩展到 i32：
+关系运算的结果是 0 或 1。`icmp` 返回 `i1`，需要用 `zext` 扩展到 `i32`：
 
 ```llvm
 %cmp = icmp slt i32 %a, %b
 %result = zext i1 %cmp to i32
 ```
 
-### 6. 短路求值：逻辑与和逻辑或
+### 5.3 短路求值：逻辑与和逻辑或
 
-`&&` 和 `||` 具有短路语义：求值过程中可能跳过部分子表达式，因此不能简单地递归生成值。
+`&&` 和 `||` 具有**短路语义**：求值过程中可能跳过部分子表达式。因此它们不能简单地递归生成值，而要用**带真/假出口的条件生成**方式处理。
 
-**关键区别**：
-
-| 表达式类型 | `emit_expr` 返回 | `emit_cond` 跳转 |
+| 表达式类型 | `emit_expr` | `emit_cond` 的跳转行为 |
 | --- | --- | --- |
-| 逻辑与 `a && b` | — | 若 a 假则跳 false_label，否则继续求值 b |
-| 逻辑或 `a \|\| b` | — | 若 a 真则跳 true_label，否则继续求值 b |
-| 关系表达式 `a < b` | 返回 SSA 值 | — |
+| 逻辑与 `a && b` | — | 若 `a` 为假 → 跳假出口；否则继续求值 `b` |
+| 逻辑或（`a`、`b` 用两个竖线连接） | — | 若 `a` 为真 → 跳真出口；否则继续求值 `b` |
+| 关系表达式 `a < b` | 返回 SSA 值 | 比较后直接跳真/假出口 |
 
-`emit_cond` 接收两个跳转目标（真出口和假出口），不返回值：
+**算法 6 · 条件生成与短路（emit_cond with Short-Circuit）**
 
-```text
-emit_cond(expr, true_lbl, false_lbl):
-    match expr:
-        And(lhs, rhs):
-            rhs_lbl = new_label()
-            emit_cond(lhs, rhs_lbl, false_lbl)
-            emit_label(rhs_lbl)
-            emit_cond(rhs, true_lbl, false_lbl)
-        Or(lhs, rhs):
-            rhs_lbl = new_label()
-            emit_cond(lhs, true_lbl, rhs_lbl)
-            emit_label(rhs_lbl)
-            emit_cond(rhs, true_lbl, false_lbl)
-        Relation(lhs, op, rhs):
-            lv = emit_expr(lhs); rv = emit_expr(rhs)
-            cmp = emit_icmp(op, lv, rv)         ; cmp 是 i1 SSA 值
-            emit_br_cond(cmp, true_lbl, false_lbl)
-        Variable(name):
-            val = emit_expr(Variable(name))
-            zero = Constant(0, i32)
-            cmp = emit_icmp(ne, val, zero)
-            emit_br_cond(cmp, true_lbl, false_lbl)
+**输入（Input）：** 条件表达式 `expr`、真出口标签 `true_lbl`、假出口标签 `false_lbl`。
+**输出（Output）：** 生成的条件跳转（无返回值）。
+
+```
+ 1: emitCond(expr, true_lbl, false_lbl):
+ 2:     match expr:
+ 3:         And(lhs, rhs):
+ 4:             rhs_lbl = newLabel();
+ 5:             emitCond(lhs, rhs_lbl, false_lbl);       // lhs 假 -> 直接走假出口
+ 6:             emitLabel(rhs_lbl);
+ 7:             emitCond(rhs, true_lbl, false_lbl);      // 还要看 rhs
+ 8:         Or(lhs, rhs):
+ 9:             rhs_lbl = newLabel();
+10:             emitCond(lhs, true_lbl, rhs_lbl);        // lhs 真 -> 直接走真出口
+11:             emitLabel(rhs_lbl);
+12:             emitCond(rhs, true_lbl, false_lbl);
+13:         Relation(l, op, r):
+14:             cmp = emitICmp(op, emitExpr(l), emitExpr(r));   // cmp 是 i1 SSA 值
+15:             emitBrCond(cmp, true_lbl, false_lbl);
+16:         Variable(name):
+17:             cmp = emitICmp(ne, emitExpr(Variable(name)), Constant(0, i32));  // 非零为真
+18:             emitBrCond(cmp, true_lbl, false_lbl);
+19:     end match
 ```
 
-当 `x = a && b;` 需要把结果存入变量时，利用三个基本块收集结果：
+短路图示（`x = a && b;`）：
+
+```mermaid
+flowchart TD
+  S["测试 a"] -->|a 为假| F["false: x = 0"]
+  S -->|a 为真| T2["测试 b"]
+  T2 -->|b 为真| T["true: x = 1"]
+  T2 -->|b 为假| F
+  T --> E["end"]
+  F --> E
+```
+
+当需要把 `a && b` 的结果存入变量时，用三个基本块收集结果：
 
 ```llvm
     %a_val = load i32, ptr %a
@@ -350,34 +385,32 @@ false:
 end:
 ```
 
-### 7. 条件表达式（三目运算符）
 
-`a ? b : c` 可以翻译为 if-else 结构：
-
-```c
-result = cond ? then_val : else_val;
-```
-
-```llvm
-    %cond_val = load i32, ptr %cond
-    %cond_cmp = icmp ne i32 %cond_val, 0
-    br i1 %cond_cmp, label %then, label %else
-then:
-    %bv = emit_expr(b)
-    store i32 %bv, ptr %result
-    br label %end
-else:
-    %ev = emit_expr(c)
-    store i32 %ev, ptr %result
-    br label %end
-end:
-```
 
 ## 六、语句转换
 
-### 1. 变量声明与常量声明
+**算法 7 · 变量声明与赋值（VarDecl / Assign）**
 
-变量声明可以包含多个声明项。先在当前作用域登记名字，再生成初始化表达式；无初始化则默认为 0：
+**输入（Input）：** 声明节点或赋值节点。
+**输出（Output）：** `alloca`、初始化 `store` 及赋值 `store`。
+
+```
+ 1: emitStmt(VarDecl(items)):
+ 2:     for item in items do
+ 3:         ctx.symbol_table.declare(item.name, alloca(i32));   // 先登记名字，分配栈槽
+ 4:     end for
+ 5:     for item in items do
+ 6:         if item.initializer != none then
+ 7:             val = emitExpr(item.initializer);
+ 8:         else
+ 9:             val = Constant(0, i32);                          // 无初始化则默认 0
+10:         end if
+11:         emitStore(val, lookupAddress(item.name));
+12:     end for
+13:
+14: emitStmt(Assign(name, value_ast)):
+15:     emitStore(emitExpr(value_ast), lookupAddress(name));
+```
 
 ```c
 int x, y = a + 1;
@@ -392,57 +425,14 @@ store i32 0, ptr %x
 store i32 %y_val, ptr %y
 ```
 
-```text
-emit_stmt(VarDecl(items)):
-    for item in items:
-        addr = ctx.symbol_table.allocate(item.name, i32)  ; 创建 alloca
-    for item in items:
-        if item.initializer:
-            val = emit_expr(item.initializer)
-        else:
-            val = Constant(0, i32)
-        emit_store(val, item.name)
-```
+### 6.1 if-else 与 else-if 链
 
-### 2. 赋值语句
-
-```text
-emit_stmt(Assign(name, value_ast)):
-    value = emit_expr(value_ast)
-    emit_store(value, name)
-```
-
-### 3. if-else
-
-条件表达式使用 `emit_cond`，then/else 分支结束后跳到结束标签：
+`if-else` 的翻译见算法 4。连续的 `if-else-if-else` 链在 AST 中本身就是**嵌套的 If 节点**（else 部分又是另一个 If），递归 `emitStmt` 自然处理，无需特殊逻辑：
 
 ```c
-if (x < 0) x = 0; else x = x + 1;
-```
-
-```llvm
-    %x_val = load i32, ptr %x
-    %cmp = icmp slt i32 %x_val, 0
-    br i1 %cmp, label %then, label %else
-then:
-    store i32 0, ptr %x
-    br label %end
-else:
-    %next = add i32 %x_val, 1
-    store i32 %next, ptr %x
-    br label %end
-end:
-```
-
-### 4. else-if 链
-
-连续的 `if-else-if-else` 结构，翻译为条件跳转的线性链：
-
-```c
-if (score >= 90) grade = 'A';
-else if (score >= 80) grade = 'B';
-else if (score >= 70) grade = 'C';
-else grade = 'D';
+if (score >= 90) grade = 65;
+else if (score >= 80) grade = 66;
+else grade = 67;
 ```
 
 ```llvm
@@ -450,85 +440,61 @@ else grade = 'D';
     %c1 = icmp sge i32 %score_val, 90
     br i1 %c1, label %case_a, label %elif1
 case_a:
-    store i8 65, ptr %grade
+    store i32 65, ptr %grade
     br label %end
 elif1:
     %c2 = icmp sge i32 %score_val, 80
-    br i1 %c2, label %case_b, label %elif2
+    br i1 %c2, label %case_b, label %else
 case_b:
-    store i8 66, ptr %grade
-    br label %end
-elif2:
-    %c3 = icmp sge i32 %score_val, 70
-    br i1 %c3, label %case_c, label %else
-case_c:
-    store i8 67, ptr %grade
+    store i32 66, ptr %grade
     br label %end
 else:
-    store i8 68, ptr %grade
+    store i32 67, ptr %grade
     br label %end
 end:
 ```
 
-实现上，else-if 链在 AST 中本身就是嵌套的 If 节点（else 部分是另一个 If），递归 `emit_stmt` 自然处理，无需特殊逻辑。
+### 6.2 while、break 与 continue
 
-### 5. while、break 和 continue
+**算法 8 · while / break / continue 生成（Loop Generation）**
 
-while 循环：先跳到条件入口，再决定进循环体还是退出：
+**输入（Input）：** `While` 节点的条件与循环体。
+**输出（Output）：** 循环的基本块结构。
 
-```c
-while (x > 0) x = x - 1;
+```
+ 1: emitStmt(While(cond, body)):
+ 2:     head = newLabel();  body_lbl = newLabel();  exit = newLabel();
+ 3:     ctx.loop_stack.push(LoopContext(head, exit));      // 供 break/continue 使用
+ 4:     emitLabel(head);
+ 5:     emitCond(cond, body_lbl, exit);                     // 条件为真进循环，否则退出
+ 6:     emitLabel(body_lbl);
+ 7:     emitStmt(body);
+ 8:     emitBr(head);                                       // 回到条件入口
+ 9:     emitLabel(exit);
+10:     ctx.loop_stack.pop();
+11:
+12: emitStmt(Break):     emitBr(ctx.loop_stack.top.exit);   // 跳出循环
+13: emitStmt(Continue):  emitBr(ctx.loop_stack.top.head);   // 跳到条件判断
 ```
 
-```llvm
-    br label %cond
-cond:
-    %x_val = load i32, ptr %x
-    %cmp = icmp sgt i32 %x_val, 0
-    br i1 %cmp, label %body, label %exit
-body:
-    %next = sub i32 %x_val, 1
-    store i32 %next, ptr %x
-    br label %cond
-exit:
+```mermaid
+flowchart TD
+  P["pre: br head"] --> H["head: 计算 cond"]
+  H -->|真| B["body"]
+  H -->|假| X["exit"]
+  B --> H
+  B -.->|break| X
+  B -.->|continue| H
 ```
 
-break 跳到循环退出块，continue 跳到循环条件块：
 
-```text
-emit_stmt(While(cond, body)):
-    head = new_label(); body_lbl = new_label(); exit = new_label()
-    ctx.loop_stack.push(exit, head)
-    emit_br(head)
-    emit_label(body_lbl)
-    emit_stmt(body)
-    emit_br(head)
-    emit_label(exit)
-    ctx.loop_stack.pop()
 
-emit_stmt(Break):
-    emit_br(ctx.loop_stack.top.exit)
+### 6.3 return
 
-emit_stmt(Continue):
-    emit_br(ctx.loop_stack.top.head)
 ```
-
-### 6. for 循环
-
-ToyC 的 `for` 循环可以先改写为 while 再生成 IR：
-
-```c
-for (init; cond; step) body;
-// 等价于
-init;
-while (cond) { body; step; }
-```
-
-### 7. return
-
-```llvm
-    %ret_val = emit_expr(expr)
-    ret i32 %ret_val
+ 1: emitStmt(Return(expr)):
+ 2:     if expr == none then emit("ret void");
+ 3:     else emit("ret i32 " + emitExpr(expr)); end if
 ```
 
 ## 七、外部函数声明
@@ -537,22 +503,20 @@ while (cond) { body; step; }
 
 ```llvm
 declare i32 @getint()
-declare i32 @putint(i32)
+declare void @putint(i32)
 declare i32 @getch()
-declare i32 @putch(i32)
+declare void @putch(i32)
 ```
 
-```text
-declare_external_functions(module):
-    module.declare("getint",  i32, [])
-    module.declare("putint",  i32, [i32])
-    module.declare("getch",   i32, [])
-    module.declare("putch",   i32, [i32])
-    module.declare("putarray", i32, [i32, ptr])
-    module.declare("getarray", i32, [ptr])
+```
+declareExternalFunctions(module):
+    module.declare("getint",  i32,  []);
+    module.declare("putint",  void, [i32]);
+    module.declare("getch",   i32,  []);
+    module.declare("putch",   void, [i32]);
 ```
 
-函数调用按从左到右生成实参：
+函数调用按**从左到右**生成实参（保留副作用顺序）：
 
 ```c
 putint(add(a, b));
@@ -562,12 +526,12 @@ putint(add(a, b));
     %a_val = load i32, ptr %a
     %b_val = load i32, ptr %b
     %sum = call i32 @add(i32 %a_val, i32 %b_val)
-    call @putint(i32 %sum)
+    call void @putint(i32 %sum)
 ```
 
 ## 八、全局变量
 
-ToyC 支持全局变量（在所有函数之外声明），生成 `global` + `alloca`（在 IR 中表示为全局地址）：
+ToyC 支持全局变量（在所有函数之外声明），生成全局定义的地址：
 
 ```c
 int global_counter = 0;
@@ -588,7 +552,7 @@ entry:
 
 ## 九、mem2reg 简介（选做）
 
-`alloca/load/store` 模式实现简单，但 `load` 和 `store` 阻断了 SSA 的 Use-Def 分析。mem2reg 识别"只通过 store 写入、只通过 load 读取、且不逃逸出函数"的局部变量，将内存访问提升为 SSA 值：
+`alloca/load/store` 模式实现简单，但 `load` 和 `store` 阻断了 SSA 的 Use-Def 分析。mem2reg 识别"只通过 store 写入、只通过 load 读取、且不逃逸出函数"的局部变量，把内存访问提升为 SSA 值：
 
 ```llvm
 ; 优化前（alloca 模式）
@@ -603,13 +567,24 @@ ret i32 %v
 ret i32 1
 ```
 
-mem2reg 的核心算法是 **dominance-based SSA construction**：
-1. 计算每条指令的 dominance 树；
-2. 为每个 alloca 计算"第一次 store 之前有 load"的"位置"（位置是一个基本块入口）；
-3. 在这些位置插入 `phi` 函数；
-4. 重命名所有 SSA 值。
+**算法 9 · mem2reg（dominance-based SSA construction，选做）**
 
-mem2reg 不是本部分必做内容，但完成后可以显著简化后续的常量传播、死代码消除等优化。
+**输入（Input）：** 采用 alloca/load/store 的函数 `func`。
+**输出（Output）：** 消除可提升 alloca 后的 SSA 形式函数。
+
+```
+ 1: mem2reg(func):
+ 2:     DT = computeDominanceTree(func);                // 1. 计算支配树
+ 3:     for each alloca a in func do
+ 4:         if not promotable(a) then continue; end if    // 只处理不逃逸的局部变量
+ 5:         S = computePhiPlacement(a, DT);               // 2. 计算需要插入 phi 的基本块入口
+ 6:         for block in S do insertPhi(block, a); end for // 3. 插入 phi
+ 7:     end for
+ 8:     renameValues(func, DT);                           // 4. 重命名所有 SSA 值（栈式重命名）
+ 9:     removeDeadAllocas(func);
+```
+
+mem2reg 不是本部分必做内容，但完成后可以显著简化第五部分的常量传播、死代码消除等优化。
 
 ## 十、完整转换示例
 
@@ -670,13 +645,25 @@ while_exit:
 }
 ```
 
+```mermaid
+flowchart TD
+  EN[entry] --> WC["while_cond"]
+  WC -->|"i <= n"| WB["while_body"]
+  WC -->|"i > n"| WX["while_exit: ret"]
+  WB --> C2{"n > 10 ?"}
+  C2 -->|是| TH["then: result = 0"]
+  C2 -->|否| EI["end_if"]
+  TH --> EI
+  EI --> WC
+```
+
 ## 十一、报告要求
 
 第三部分不提交独立源码或可执行文件。最终实验报告必须包含：
 
 1. IR 选择理由，以及自定义 IR、LLVM IR 或 MLIR 的格式说明；
 2. IR 的模块、函数、基本块、值和指令数据结构；
-3. 符号表的数据结构、嵌套作用域如何管理内层遮蔽；
+3. 符号表的数据结构，以及嵌套作用域如何管理内层遮蔽；
 4. 每一种语法成分的文字解释、输入示例、输出 LLVM IR 和转换伪代码；
 5. `emit_cond` 与 `emit_expr` 的区别，短路求值如何避免不必要的函数调用；
 6. else-if 链的 AST 结构与翻译方式；

@@ -7,9 +7,13 @@ description: 根据 ToyC 文法构造 AST，比较递归下降、LL(1) 与 LR �
 
 # 第二部分 · 语法分析
 
-## 一、目标
+## 一、实验目标
 
-语法分析器读取 Token 流，检查 ToyC 文法，并构造后续语义分析和 IR 生成使用的抽象语法树（AST）。
+语法分析器（parser）读取第一部分产出的 Token 流，检查它是否**符合 ToyC 文法**，并构造出后续语义分析和 IR 生成要用的**抽象语法树（AST）**。
+
+:::tip[先建立直觉]
+词法分析把程序切成一个个"词"；语法分析接着按语法规则把这些词组织成一棵树，树的形状直接反映了运算的先后顺序。
+:::
 
 ```mermaid
 flowchart LR
@@ -20,7 +24,19 @@ flowchart LR
   S --> I[中间代码生成]
 ```
 
-## 二、核心文法
+### 本部分的三条可选技术路线
+
+本部分允许任选一条路线实现，但必须在报告中说明取舍理由：
+
+| 路线 | 基本思路 | 实现难度 | 说明 |
+| --- | --- | --- | --- |
+| 递归下降 | 每个非终结符对应一个函数 | 低 | 最直观，推荐首选 |
+| LL(1) | 预测分析表 + 显式栈 | 中 | 需要计算 FIRST / FOLLOW |
+| LR(0) / SLR(1) | 项目集 + ACTION/GOTO 表 | 高 | 分析能力最强，能处理更多文法 |
+
+## 二、ToyC 核心文法
+
+下面使用 EBNF 记号：`*` 表示重复零次或多次，`?` 表示可选，`|` 表示选择。
 
 ```text
 CompUnit    -> FuncDef+
@@ -42,75 +58,197 @@ UnaryExpr   -> PrimaryExpr | ('+' | '-' | '!') UnaryExpr
 PrimaryExpr -> ID | NUMBER | '(' Expr ')' | ID '(' [ Expr (',' Expr)* ] ')'
 ```
 
-其中 `RelOp`、`AddOp` 和 `MulOp` 分别展开为文法页中的对应运算符集合。库函数仍按普通 ID 和函数调用解析，不加入文法特殊产生式。
+其中 `RelOp`、`AddOp`、`MulOp` 分别展开为[文法页](../reference/grammar)中对应的运算符集合。库函数（`getint`、`putint` 等）仍按普通 `ID` 和函数调用解析，不加入文法特殊产生式。
 
-## 三、两类分析方法
+## 三、从 Token 到 AST 的转换逻辑
 
-### 从 Token 到 AST 的转换逻辑
+解析器的每个函数对应一个非终结符：先检查当前 Token 是否能作为该产生式的起始符号，匹配终结符后递归调用子规则，最后构造 AST 节点。AST **不保留没有语义的括号和分号**，但保留源位置，用于后续报错。
 
-解析器的每个函数对应一个非终结符。函数先检查当前 Token 是否能作为该产生式的起始符号，匹配终结符后递归调用子规则，最后构造 AST 节点。AST 不保留没有语义的括号和分号，但保留源位置。
+### 结合性与优先级：以 `a + b * c` 为例
 
-以 `a + b * c` 为例，解析过程先识别 `AddExpr`，左侧得到 `a`；看到 `+` 后解析右侧 `MulExpr`，而 `MulExpr` 继续把 `b * c` 组合成子树，因此 AST 是 `+(a, *(b, c))`，而不是 `*(+(a,b),c)`。
-
-```text
-parse_expr():
-  return parse_lor_expr()
-
-parse_add_expr():
-  left = parse_mul_expr()
-  while peek() in { '+', '-' }:
-    op = consume()
-    right = parse_mul_expr()
-    left = Binary(op, left, right, source_location=op.location)
-  return left
-
-parse_primary_expr():
-  if match(NUMBER): return Number(previous().value)
-  if match(ID):
-    name = previous().lexeme
-    if match('('): return parse_call_after_name(name)
-    return Variable(name)
-  if match('('):
-    expr = parse_expr()
-    expect(')')
-    return expr
-  error("expected primary expression")
-```
-
-遇到错误时，解析器应指出期望 Token、实际 Token、行列位置，并使用同步集合跳过输入。例如语句解析失败后跳过到 `;`、`}` 或控制语句关键字，再继续报告后续错误。
-
-### 递归下降与 LL(1)
-
-ToyC 的表达式文法含有左递归。实现递归下降时，将 `E -> E + T | T` 改写成 `E -> T E'`，或直接用循环表达左结合：
-
-```text
-parse_add_expr():
-    left = parse_mul_expr()
-    while peek() in { '+', '-' }:
-        op = consume()
-        right = parse_mul_expr()
-        left = Binary(op, left, right)
-    return left
-```
-
-需要计算 FIRST/FOLLOW 集，并用预测分析表检测冲突。错误恢复可以跳过 Token，直到遇到当前非终结符的 FOLLOW 集元素。
-
-### LR 分析
-
-LR 分析使用项目集、CLOSURE、GOTO 和 ACTION/GOTO 表。建议至少实现 LR(0) 项目集和 SLR(1) 表，并报告移进-归约、归约-归约冲突。
+表达式文法按优先级分层：越靠下的规则优先级越高。解析 `a + b * c` 时，先识别加法（`AddExpr`），左侧得到 `a`；看到 `+` 后解析右侧的乘法子表达式，`MulExpr` 又把 `b * c` 组合成一棵子树。因此 AST 是 `+(a, *(b, c))`，而不是 `*(+(a, b), c)`：
 
 ```mermaid
 flowchart TD
-  G[ToyC 文法] --> C[增广文法]
-  C --> I[项目集 CLOSURE/GOTO]
-  I --> T[ACTION/GOTO 表]
-  T --> D[移进 / 归约驱动器]
-  D --> A[AST]
+  ADD["Binary('+')"] --> A["a"]
+  ADD --> MUL["Binary('*')"]
+  MUL --> B["b"]
+  MUL --> C["c"]
 ```
+
+如果用错误的方式解析（先算 `a + b` 再乘 `c`），结果就完全错了。这就是为什么文法要分层，以及为什么要区分左结合和右结合。
+
+### 递归下降实现
+
+**算法 1 · 递归下降解析表达式（Recursive-Descent Expression Parsing）**
+
+**输入（Input）：** Token 流（`peek()` 返回当前 Token 但不消耗，`consume()` 消耗并前进）。
+**输出（Output）：** 表达式对应的 AST 节点。
+
+```
+ 1: parseExpr():                                    // Expr -> LOrExpr
+ 2:     return parseLOrExpr();
+ 3:
+ 4: parseAddExpr():                                 // AddExpr -> MulExpr (('+' | '-') MulExpr)*
+ 5:     left = parseMulExpr();
+ 6:     while peek() in { '+', '-' } do              // 左结合：用循环表达，而不是左递归
+ 7:         op = consume();
+ 8:         right = parseMulExpr();
+ 9:         left = Binary(op, left, right, loc = op.loc);   // 构造二元节点
+10:     end while
+11:     return left;
+12:
+13: parsePrimaryExpr():                            // PrimaryExpr -> ID | NUMBER | '(' Expr ')' | Call
+14:     if match(NUMBER) then
+15:         return Number(previous().value);
+16:     end if
+17:     if match(ID) then
+18:         name = previous().lexeme;
+19:         if match('(') then return parseCallAfterName(name); end if
+20:         return Variable(name);
+21:     end if
+22:     if match('(') then
+23:         e = parseExpr();
+24:         expect(')');                                // 括号不进 AST，但保留源位置
+25:         return e;
+26:     end if
+27:     error("expected primary expression");           // 出错提示
+```
+
+**为什么用循环而不是左递归？** 文法里写的是 `AddExpr -> AddExpr '+' MulExpr`（**左递归**）。直接写成函数会无限递归，所以要改写成循环（如上），或改写文法为 `E -> T E'`、`E' -> '+' T E' | ε`。两种写法等价，循环写法更直观。
+
+### LL(1)：计算 FIRST / FOLLOW 集
+
+LL(1) 需要一个**预测分析表**，而表的构造依赖 FIRST 和 FOLLOW 集。
+
+**算法 2 · 计算 FIRST / FOLLOW 集（FIRST / FOLLOW Computation）**
+
+**输入（Input）：** 上下文无关文法 `G`。
+**输出（Output）：** 每个非终结符的 FIRST 集与 FOLLOW 集。
+
+```
+ 1: for each terminal a do FIRST(a) = { a }; end for
+ 2: for each nonterminal A do FIRST(A) = ∅;  FOLLOW(A) = ∅; end for
+ 3: FOLLOW(start) = { $ };                           // 起始符号的 FOLLOW 含输入结束符
+ 4: repeat
+ 5:     changed = false;
+ // ---- FIRST 计算 ----
+ 6:     for each production A -> X1 X2 ... Xn do
+ 7:         for i = 1 to n do
+ 8:             add (FIRST(Xi) \ { ε }) to FIRST(A);
+ 9:             if ε ∉ FIRST(Xi) then break; end if
+10:         end for
+11:         if all Xi can derive ε then add ε to FIRST(A); end if
+12:     end for
+ // ---- FOLLOW 计算 ----
+13:     for each production A -> X1 X2 ... Xn do
+14:         for i = 1 to n do
+15:             if Xi is a nonterminal then
+16:                 add (FIRST(X_{i+1} ... Xn) \ { ε }) to FOLLOW(Xi);
+17:                 if X_{i+1} ... Xn can derive ε then add FOLLOW(A) to FOLLOW(Xi); end if
+18:             end if
+19:         end for
+20:     end for
+21: until not changed                                  // 迭代到不动点
+22: return FIRST, FOLLOW;
+```
+
+以 `AddExpr -> MulExpr | AddExpr AddOp MulExpr` 为例，可得到 `FIRST(MulExpr) ⊆ FIRST(AddExpr)`、`FOLLOW(AddExpr) ⊇ { '+', '-', ')' , ';' }`，进而填出预测分析表。若表中某个 `M[A, a]` 出现两个产生式（**冲突**），说明文法不是 LL(1)。
+
+**算法 3 · LL(1) 表驱动解析（Table-Driven LL(1) Parsing）**
+
+**输入（Input）：** Token 流、预测分析表 `M`。
+**输出（Output）：** AST 或语法错误。
+
+```
+ 1: stack = [ '$', start_symbol ];  pos = 0;
+ 2: while stack not empty do
+ 3:     X = stack.top();  a = lookahead(pos);
+ 4:     if X is a terminal then
+ 5:         if X == a then stack.pop(); pos++;          // 匹配终结符
+ 6:         else error("expected " + X + ", got " + a); end if
+ 7:     else if M[X, a] == (A -> Y1 Y2 ... Yk) then
+ 8:         stack.pop();
+ 9:         push Yk, ..., Y1;                           // 逆序入栈，保证 Y1 先被展开
+10:         build_ast_node(A);
+11:     else
+12:         recover_by_follow(X);                       // 见算法 6
+13:     end if
+14: end while
+```
+
+### LR：项目集与分析表
+
+LR 分析的能力比 LL(1) 更强，代价是构造更复杂。
+
+**算法 4 · LR(0) 项目集规范族（CLOSURE / GOTO）**
+
+**输入（Input）：** 增广文法 `G'`（新增 `S' -> S`）。
+**输出（Output）：** 项目集族（状态集合）与状态转移。
+
+```
+ 1: I = { CLOSURE({ S' -> · S }) };                  // 初始项目集（· 标记当前解析位置）
+ 2: worklist = I;
+ 3: while worklist not empty do
+ 4:     J = worklist.pop();
+ 5:     for each grammar symbol X do
+ 6:         K = GOTO(J, X);                            // 所有形如 A -> α·Xβ 的项目把 · 右移一位
+ 7:         if K != ∅ and K ∉ I then
+ 8:             I = I ∪ { K };  worklist.push(K);
+ 9:         end if
+10:     end for
+11: end while
+12: return I;
+```
+
+**算法 5 · LR 移进-归约驱动器（Shift-Reduce Driver）**
+
+**输入（Input）：** Token 流、ACTION/GOTO 分析表。
+**输出（Output）：** AST，或移进-归约 / 归约-归约冲突报告。
+
+```
+ 1: states = [ 0 ];  symbols = [];  pos = 0;
+ 2: loop
+ 3:     s = top(states);  a = lookahead(pos);
+ 4:     if ACTION[s, a] == shift t then
+ 5:         push(states, t);  push(symbols, a);  pos++;
+ 6:     else if ACTION[s, a] == reduce (A -> β) then
+ 7:         pop |β| symbols and states;                 // 弹出右部
+ 8:         node = build_ast_node(A, popped_symbols);
+ 9:         push(symbols, node);
+10:         push(states, GOTO[ top(states), A ]);       // 按左部转移
+11:     else if ACTION[s, a] == accept then
+12:         return top(symbols);                        // 语法树根节点
+13:     else
+14:         report_conflict(s, a);  error_recovery();
+15:     end if
+16: end loop
+```
+
+建议至少实现 LR(0) 项目集和 SLR(1) 表，并在报告中给出移进-归约、归约-归约冲突的分析。
+
+### 错误恢复
+
+**算法 6 · 语法错误恢复（Panic-Mode Error Recovery）**
+
+**输入（Input）：** 出错位置，以及当前非终结符的期望集合。
+**输出（Output）：** 完成同步的解析位置。
+
+```
+ 1: report_error(expect, actual, line, col);          // 报出期望、实际、行列
+ 2: sync = { ';', '}' } ∪ { 'if', 'while', 'return' };    // 语句级同步集合
+ 3: while not eof() and lookahead() ∉ sync do
+ 4:     advance();                                     // 丢弃 Token，直到遇到同步符号
+ 5: end while
+ 6: if lookahead() ∈ { ';', '}' } then advance(); end if  // 吃掉同步符号
+ 7: return current_position();                         // 继续解析后续语句
+```
+
+例如语句解析失败后，跳过到 `;`、`}` 或控制语句关键字，再继续报告后续错误，避免一次错误导致满屏报错。
 
 ## 四、AST 设计
 
-```text
+```
 Program(functions)
 Function(return_type, name, params, body)
 Block(statements)
@@ -130,7 +268,7 @@ AST 应丢弃不影响语义的括号和分隔符，但保留源位置，便于�
 
 ## 五、选做：语义分析
 
-语法分析完成后，可以继续阅读[选做·语义分析](./optional-semantic)，在 AST 与 LLVM IR 生成之间加入符号表、作用域、类型和控制流约束检查。语义分析不属于本部分的必做提交。
+语法分析完成后，可以继续阅读[选做 · 语义分析](./optional-semantic)，在 AST 与 IR 生成之间加入符号表、作用域、类型和控制流约束检查。语义分析不属于本部分的必做提交。
 
 ## 六、提交物
 

@@ -107,30 +107,27 @@ flowchart LR
 
 ## 四、归纳变量检测
 
-```cpp
-struct IndVar {
-    Value* i;                  // 基础归纳变量
-    Value* derived;            // 派生归纳变量
-    int64_t step;              // 每次迭代增量
-    Value* initial;            // 初始值
-};
+**算法 · 归纳变量检测（Detect Induction Variables）**
 
-vector<IndVar> detect_indvars(Loop* L) {
-    vector<IndVar> result;
-    for (auto* phi : L->phis()) {
-        // phi 初值 + 步长；每次迭代增加相同常量
-        if (phi->incoming(0) is constant && phi->incoming(1) is phi + constant) {
-            result.push_back({phi, nullptr, constant, constant_init});
-        }
-    }
-    // 检测派生：i * k, i + c, i - c
-    for (auto* I : L->instructions()) {
-        if (is_mul(I, indvar, constant_k)) {
-            // 派生归纳变量 i * k
-        }
-    }
-    return result;
-}
+**输入（Input）：** 自然循环 `L`。
+**输出（Output）：** 基础归纳变量与派生归纳变量列表。
+
+```
+ 1: detectIndVars(L):
+ 2:     result = [];
+ 3:     for each phi in L.phis do
+ 4:         // 基础归纳变量：phi 的一个入边是常量，另一个入边是 "phi + 常量 c"
+ 5:         if isConstant(phi.incoming[0]) and isAddWithConstant(phi.incoming[1], c) then
+ 6:             result.push( IndVar(base = phi, step = c, initial = phi.incoming[0]) );
+ 7:         end if
+ 8:     end for
+ 9:     for each inst I in L.instructions do
+10:         // 派生归纳变量：i * k、i + c、i - c
+11:         if isMulWithConstant(I, iv, k) then
+12:             result.push( IndVar(base = iv, derived = I, step = iv.step * k) );
+13:         end if
+14:     end for
+15:     return result;
 ```
 
 ## 五、循环展开配合

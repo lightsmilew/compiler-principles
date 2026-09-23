@@ -81,10 +81,24 @@ flowchart LR
 3. 如果指令是 `load`，要确认没有 `store` 在循环内写到同一地址（别名分析）；
 4. 指令不是 `phi`、`br`、`ret` 等控制流指令。
 
-```text
-for each inst I in loop (postorder):
-    if all_operands_loop_invariant(I) && I.is_pure():
-        I.is_invariant = true
+**算法 · 循环不变指令判定（Detect Loop-Invariant Instructions）**
+
+**输入（Input）：** 自然循环 `L`（含循环体块集合）。
+**输出（Output）：** 被标记为 `is_invariant` 的指令集合。
+
+```
+ 1: markInvariants(L):
+ 2:     repeat
+ 3:         changed = false;
+ 4:         for each inst I in postorder(L.body) do
+ 5:             if I.is_invariant then continue; end if
+ 6:             if not I.is_pure() then continue; end if        // 有副作用 -> 不外提
+ 7:             if allOperandsOutside(I, L) then                 // 操作数都是常量或定义在循环外
+ 8:                 I.is_invariant = true;  changed = true;
+ 9:             end if
+10:         end for
+11:     until not changed                       // 某条不变后可能让下游也变得不变
+12:     return L.invariants;
 ```
 
 迭代几次直到集合稳定——因为某条指令变为不变后，可能让它的下游也变得不变。

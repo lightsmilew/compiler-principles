@@ -65,15 +65,38 @@ struct BasicBlock {
 
 CFG 的构造分两步：
 
-```text
-1. 扫描函数，识别所有标签和终结指令，把 IR 切成基本块列表。
-2. 遍历每个基本块的终结指令：
-   - br i1 %c, label %T1, label %T2    → successors = [T1, T2]
-   - br label %T                       → successors = [T]
-   - switch ...                        → successors = [每个 case + default]
-   - ret / unreachable                 → successors = []
-3. 反向遍历添加 predecessors，建立双向链接。
+**算法 1 · 构造控制流图（Build CFG）**
+
+**输入（Input）：** 函数的 IR 指令序列（含标签与终结指令）。
+**输出（Output）：** 基本块列表，以及基本块之间的前驱 / 后继关系。
+
 ```
+ 1: blocks = [];  current = newBlock();
+ 2: for each instruction I in function do
+ 3:     if I is a label then                            // 标签开启一个新块
+ 4:         if current not empty then blocks.push(current); end if
+ 5:         current = newBlock(label = I.name);
+ 6:     end if
+ 7:     current.instructions.push(I);
+ 8:     if I is a terminator then                       // 终结指令结束当前块
+ 9:         blocks.push(current);  current = newBlock();
+10:     end if
+11: end for
+12: for each block B in blocks do
+13:     for each target T in successorsOf(B.terminator) do
+14:         B.successors.push(T);  T.predecessors.push(B);   // 建立双向边
+15:     end for
+16: end for
+17: return blocks;
+```
+
+其中终结指令与后继的对应关系为：
+
+| 终结指令 | successors |
+| --- | --- |
+| `br i1 %c, label %T1, label %T2` | `[T1, T2]` |
+| `br label %T` | `[T]` |
+| `ret` / `unreachable` | `[]` |
 
 构造完成的 CFG 形如：
 

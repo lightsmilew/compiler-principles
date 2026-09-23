@@ -13,10 +13,8 @@ description: 在冲突图上做 K 着色，把同时活跃的值映射到不同�
 
 ## 一、问题形式化
 
-```text
-输入：冲突图 G = (V, E)，可用物理寄存器集合 R，|R| = K
-输出：函数 color: V → R，使得 {u, v} ∈ E ⇒ color(u) ≠ color(v)
-```
+**输入（Input）：** 冲突图 `G = (V, E)`，可用物理寄存器集合 `R`（`|R| = K`）。
+**输出（Output）：** 着色函数 `color: V -> R`，使得任意边 `{u, v} ∈ E` 都满足 `color(u) ≠ color(v)`。
 
 如果 |R| 个颜色足以覆盖图 G，则 G 是 K-可着色的。
 
@@ -43,15 +41,26 @@ flowchart TD
 
 Briggs 提出的简化顺序：
 
-```text
-push_worklist = []
-for v in nodes(G) sorted by degree:
-    if degree(v) < K:
-        push_worklist.append(v)
-while push_worklist not empty:
-    v = pop(push_worklist)
-    stack.push(v)
-    G.remove(v)
+**算法 · 简化阶段（Briggs Simplify）**
+
+**输入（Input）：** 冲突图 `G`、可用颜色数 `K`。
+**输出（Output）：** 待回填的节点栈 `stack`。
+
+```
+ 1: simplify(G, K):
+ 2:     stack = [];
+ 3:     worklist = sortByDegree(nodes(G));
+ 4:     while worklist not empty do
+ 5:         v = worklist.pop();
+ 6:         if degree(v) < K then                       // 度数小于 K，一定能着色
+ 7:             stack.push(v);  G.remove(v);
+ 8:             decrementDegreeOfNeighbors(v);           // 邻居度数 -1，可能变得可删
+ 9:         else
+10:             v = chooseSpillCandidate(G);             // 没有低度节点 -> 选一个 spill 候选
+11:             markForSpill(v);  stack.push(v);  G.remove(v);
+12:         end if
+13:     end while
+14:     return stack;
 ```
 
 简化后剩余的图要么是 K-可着色的（每点度 < K），要么必须 spill。
@@ -95,17 +104,23 @@ double spill_cost(LiveRange r) {
 
 栈中节点按压栈逆序弹回，每个节点扫描邻居已用颜色，挑第一个未用的：
 
-```cpp
-while (!stack.empty()) {
-    int v = stack.pop();
-    auto used = colors_of(v.neighbors);
-    for (int c : allocatable_registers) {
-        if (!used.count(c)) {
-            assign(v, c);
-            break;
-        }
-    }
-}
+**算法 · 回填颜色（Assign Colors）**
+
+**输入（Input）：** 节点栈 `stack`、冲突图 `G`、可用颜色数 `K`。
+**输出（Output）：** 每个节点的颜色，或标记为 spill。
+
+```
+ 1: assignColors(stack, G, K):
+ 2:     while stack not empty do
+ 3:         v = stack.pop();                            // 按压栈逆序弹回
+ 4:         used = colorsOfNeighbors(v, G);
+ 5:         c = firstColorNotIn(used, K);               // 挑一个邻居没用过的颜色
+ 6:         if c != none then assign(v, c);
+ 7:         else
+ 8:             markForSpill(v);                        // K 个颜色都不够 -> spill
+ 9:             insertSpillCode(v);                     // 插入 sw / lw
+10:         end if
+11:     end while
 ```
 
 如果所有 K 个颜色都已被用，v 就 spill——分配失败，回退到插入 `sw/lw` 后重做冲突图。

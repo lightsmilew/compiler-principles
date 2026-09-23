@@ -78,22 +78,34 @@ flowchart TD
 
 另一种思路是反向遍历：从每个有副作用的"根"（store、call、ret、br）出发，沿 Use-Def 链把所有结果"标记为活"，未被标记的就是死代码：
 
-```text
-mark(Instruction* I):
-    if I.alive: return
-    I.alive = true
-    for operand in I.operands():
-        if operand is instruction result:
-            mark(def_of(operand))
+**算法 2 · 基于 Use-Def 链的标记-清除 DCE（Mark & Sweep DCE）**
 
-for block in cfg:
-    for inst in block:
-        if inst.has_side_effect || inst.is_terminator:
-            mark(&inst)
-for block in cfg:
-    for inst in block:
-        if !inst.alive:
-            delete inst
+**输入（Input）：** 函数 CFG。
+**输出（Output）：** 只保留"活"指令的 CFG。
+
+```
+ 1: mark(I):                                       // 后向遍历 Use-Def 链
+ 2:     if I.alive then return; end if             // 已经标记过
+ 3:     I.alive = true;
+ 4:     for each operand V of I do
+ 5:         if V is defined by instruction D then mark(D); end if
+ 6:     end for
+ 7:
+ 8: markLive(func):                                 // 从有副作用的"根"出发
+ 9:     for each block B in func do
+10:         for each inst I in B do
+11:             if I.has_side_effect or I.is_terminator then mark(I); end if
+12:         end for
+13:     end for
+14:
+15: sweep(func):                                    // 清除未标记的指令
+16:     for each block B in func do
+17:         for each inst I in B do
+18:             if not I.alive then delete(I); end if
+19:         end for
+20:     end for
+21:
+22: dce(func):   markLive(func);   sweep(func);
 ```
 
 ```mermaid

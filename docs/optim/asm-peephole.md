@@ -134,25 +134,29 @@ add %x, %y, %z
 
 ## 四、迭代执行
 
-```cpp
-bool peephole(Assembly& code) {
-    bool changed;
-    do {
-        changed = false;
-        for (size_t i = 0; i + 2 <= code.size(); ) {
-            int matched = 0;
-            for (auto& rule : rules) {
-                if (match(code, i, rule)) {
-                    apply(code, i, rule);
-                    changed = true;
-                    matched = rule.match.size();
-                    break;
-                }
-            }
-            i += max(1, matched);     // 替换后回退一个窗口
-        }
-    } while (changed);
-}
+**算法 · 窥孔优化主循环（Peephole Optimization）**
+
+**输入（Input）：** 汇编指令序列与规则集合 `rules`。
+**输出（Output）：** 应用规则后的汇编。
+
+```
+ 1: peephole(code):
+ 2:     repeat
+ 3:         changed = false;  i = 0;
+ 4:         while i + 2 <= len(code) do
+ 5:             matched = 0;
+ 6:             for each rule R in rules do                 // 窗口大小 2 ~ 3
+ 7:                 if match(code, i, R) and guardOk(code, i, R) then
+ 8:                     apply(code, i, R);
+ 9:                     changed = true;
+10:                     matched = len(R.pattern);
+11:                     break;
+12:                 end if
+13:             end for
+14:             i += max(1, matched);                       // 替换后回退一个窗口，便于连锁匹配
+15:         end while
+16:     until not changed                                   // 一轮无变化即结束
+17:     return code;
 ```
 
 回退一个窗口是为了让新生成的指令能与前一条形成新模式（如删除 `mv` 后形成 `add t0, t0, 0`）。
@@ -165,9 +169,9 @@ flowchart TD
   Slide --> Match{匹配任意规则?}
   Match -- 是 --> Apply[用规则 replace 窗口<br/>回退一个窗口位置]
   Apply --> Reset
-  Match -- 否 --> Next[i += max(1, 匹配长度)]
+  Match -- 否 --> Next["i += max(1, 匹配长度)"]
   Next --> Slide
-  Slide -.窗口到末尾.-> Loop
+  Slide -.->|窗口到末尾| Loop
   Loop -- 否 --> End[一轮无变化, 完成]
 ```
 

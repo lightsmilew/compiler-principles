@@ -41,33 +41,28 @@ IR 层的 SSA 值是无限的，到了汇编层才有"寄存器压力"的概念�
 
 对每条汇编指令编号，扫描指令序列：
 
-```cpp
-struct LiveRange {
-    int start, end;
-    int reg;
-};
-vector<LiveRange> build_live_ranges(const vector<Instruction>& code) {
-    // 1. 找到每个 reg 的最后使用位置
-    map<int, int> last_use;
-    for (int i = 0; i < code.size(); i++) {
-        for (int r : code[i].uses()) last_use[r] = i;
-    }
-    // 2. 找到每个 reg 的第一次定义
-    map<int, int> first_def;
-    for (int i = 0; i < code.size(); i++) {
-        for (int r : code[i].defs()) {
-            if (!first_def.count(r)) first_def[r] = i;
-        }
-    }
-    // 3. 配对
-    vector<LiveRange> ranges;
-    for (auto& [r, def] : first_def) {
-        if (last_use.count(r)) {
-            ranges.push_back({def, last_use[r] + 1, r});
-        }
-    }
-    return ranges;
-}
+**算法 1 · 构造活跃区间（Build Live Ranges）**
+
+**输入（Input）：** 已编号的汇编指令序列。
+**输出（Output）：** 每个虚拟寄存器的活跃区间 `[start, end)`。
+
+```
+ 1: buildLiveRanges(code):
+ 2:     last_use = Map<Reg, int>();                      // 每个寄存器最后一次被使用的位置
+ 3:     first_def = Map<Reg, int>();                     // 每个寄存器第一次被定义的位置
+ 4:     for i = 0 to len(code) - 1 do
+ 5:         for each r in usesOf(code[i]) do last_use[r] = i; end for
+ 6:         for each r in defsOf(code[i]) do
+ 7:             if r ∉ first_def then first_def[r] = i; end if
+ 8:         end for
+ 9:     end for
+10:     ranges = [];
+11:     for each (r, def) in first_def do
+12:         if r ∈ last_use then
+13:             ranges.push( LiveRange(reg = r, start = def, end = last_use[r] + 1) );
+14:         end if
+15:     end for
+16:     return ranges;
 ```
 
 ### 2.3 跨越基本块
@@ -92,21 +87,22 @@ vector<LiveRange> build_live_ranges(const vector<Instruction>& code) {
 
 构造：
 
-```cpp
-Graph build_interference(const vector<LiveRange>& ranges) {
-    Graph G;
-    for (auto& r : ranges) G.add_node(r.reg);
-    for (auto& r1 : ranges) {
-        for (auto& r2 : ranges) {
-            if (r1.reg == r2.reg) continue;
-            if (r1.start < r2.end && r2.start < r1.end) {
-                G.add_edge(r1.reg, r2.reg);    // 区间重叠
-            }
-        }
-    }
-    // 移除 (a, b) 和 move 相关边后再考虑（见 move-aware）
-    return G;
-}
+**算法 2 · 构造冲突图（Build Interference Graph）**
+
+**输入（Input）：** 活跃区间列表。
+**输出（Output）：** 冲突图 `G`。
+
+```
+ 1: buildInterference(ranges):
+ 2:     G = new Graph();
+ 3:     for each r in ranges do G.addNode(r.reg); end for
+ 4:     for each pair (r1, r2) in ranges do
+ 5:         if r1.reg == r2.reg then continue; end if
+ 6:         if r1.start < r2.end and r2.start < r1.end then
+ 7:             G.addEdge(r1.reg, r2.reg);               // 区间重叠 -> 连边
+ 8:         end if
+ 9:     end for
+10:     return G;                                        // move 相关边在合并阶段再处理
 ```
 
 下面这张图把上面汇编示例的活跃区间、它们彼此重叠的位置，以及由此导出的冲突图一次性画出来：

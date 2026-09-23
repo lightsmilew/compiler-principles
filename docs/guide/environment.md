@@ -640,13 +640,13 @@ toyc-cpp/                    # 仓库目录名由你决定，此处以 toyc-cpp 
 
 ## 附：参考文档下载
 
+
 以下文档可在本地离线阅读，也可通过下方链接重新下载：
 
 - [下载 QEMU 本地调试指南](pathname:///pdf/QEMU本地调试指南.pdf) — 在 QEMU 中单步调试编译器生成的 RISC-V 汇编
 - [下载 SysY2022 语言定义](pathname:///pdf/SysY2022语言定义-V1.pdf) — 编译系统赛的官方语言规范（基本数据类型、语句、函数等）
 - [下载 SysY2022 运行时库](pathname:///pdf/SysY2022运行时库-V1.pdf) — `getint`、`putint` 等运行时函数的接口说明
 - [下载 SysY2026 扩展规范](pathname:///pdf/Sysy2026.pdf) — 张量（tensor）类型与矩阵乘法运算符 `@`
-
 下载后放到 `third_party/docs/` 目录下便于随时查阅：
 
 ```bash
@@ -663,7 +663,9 @@ curl -L -o third_party/docs/SysY2022运行时库-V1.pdf \
 curl -L -o third_party/docs/Sysy2026.pdf \
     "${SITE_BASE_URL:-http://localhost:3000}/compiler-principles/pdf/Sysy2026.pdf"
 ```
-
+:::note[SysY 语言定义]
+SysY2022 与 SysY2026 语言定义仅供同学们参考，不做要求。
+:::
 ## 四、最小可运行验证
 
 在正式动手前，请先确保下面的命令能跑通，这证明你的工具链是完整的：

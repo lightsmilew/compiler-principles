@@ -297,7 +297,7 @@ h6 {
 
 .theme-doc-markdown p,
 .theme-doc-markdown li {
-  max-width: 74ch;
+  max-width: none;
 }
 
 .theme-doc-markdown p {

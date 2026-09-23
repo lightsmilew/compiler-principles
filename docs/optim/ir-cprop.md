@@ -48,11 +48,28 @@ const[v] = c
 
 构造常量表的过程：
 
-```text
-1. 初始化：常量字面量本身的 const 为自身。
-2. 迭代：对每条指令，若所有操作数 const 都已知且指令是纯函数，
-   则 const[result] = eval(instruction)。
-3. 直到不再产生新的常量。
+**算法 · 常量传播（Constant Propagation）**
+
+**输入（Input）：** 函数 IR。
+**输出（Output）：** 已知常量的 SSA 值集合 `const`。
+
+```
+ 1: propagateConstants(func):
+ 2:     const = Map<Value, Constant>();
+ 3:     for each I in func do
+ 4:         if I is a constant literal then const[I.result] = I.value; end if   // 初始化
+ 5:     end for
+ 6:     repeat
+ 7:         changed = false;
+ 8:         for each I in func do
+ 9:             if I.result ∉ const and allOperandsIn(I, const) and isPure(I) then
+10:                 const[I.result] = evaluate(I.opcode, operands(I));           // 编译期求值
+11:                 changed = true;
+12:             end if
+13:         end for
+14:     until not changed
+15:     for each v in const do replaceAllUsesWith(v, const[v]); end for
+16:     return const;
 ```
 
 例如：
@@ -107,15 +124,22 @@ ToyC 只支持整数，可以放心应用。
 
 ## 五、迭代执行顺序
 
-```text
-loop:
-    changed = false
-    changed |= fold_constants()         // 1. 局部折叠
-    changed |= propagate_copies()       // 2. 复制传播
-    changed |= propagate_constants()    // 3. 常量传播（依赖 1+2 的成果）
-    changed |= simplify_algebraic()     // 4. 代数简化
-    changed |= dce()                    // 5. 死代码清理
-    if changed: goto loop
+**算法 · 优化管线迭代到不动点（Optimization Pipeline）**
+
+**输入（Input）：** 函数 IR。
+**输出（Output）：** 优化后的 IR。
+
+```
+ 1: runPipeline(func):
+ 2:     repeat
+ 3:         changed = false;
+ 4:         changed |= foldConstants(func);          // 1. 局部常量折叠
+ 5:         changed |= propagateCopies(func);        // 2. 复制传播
+ 6:         changed |= propagateConstants(func);     // 3. 常量传播（依赖 1、2 的成果）
+ 7:         changed |= simplifyAlgebraic(func);      // 4. 代数恒等式化简
+ 8:         changed |= eliminateDeadCode(func);      // 5. 清理死代码
+ 9:     until not changed
+10:     return func;
 ```
 
 几个观察：

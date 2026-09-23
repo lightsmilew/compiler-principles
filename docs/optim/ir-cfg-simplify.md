@@ -124,6 +124,39 @@ flowchart LR
 - 块合并后块内的活跃变量 / 可用表达式集合需要重新计算——所以整轮要循环到不动点；
 - 实现时不必严格分阶段，可以在一个 pass 内对每个基本块做局部简化并记录修改标志。
 
+### 5.1 简化算法
+
+**算法 · 控制流简化（CFG Simplification）**
+
+**输入（Input）：** 函数 CFG。
+**输出（Output）：** 简化后的 CFG。
+
+```
+ 1: simplifyCFG(func):
+ 2:     repeat
+ 3:         changed = false;
+ 4:         for each block B in func do
+ 5:             T = B.terminator;
+ 6:             // 1. 折叠恒真的条件分支
+ 7:             if T is (br i1 c, %X, %Y) and c is a constant then
+ 8:                 B.terminator = br (c ? %X : %Y);  changed = true;
+ 9:             end if
+10:             // 2. 跳到跳转：替换为最终目标
+11:             if T jumps to L and L 只有一条 br 跳到 L2 then
+12:                 T.target = L2;  changed = true;
+13:             end if
+14:         end for
+15:         // 3. 合并 A -> B 且 B 仅有 A 一个前驱的块
+16:         for each edge (A -> B) do
+17:             if B.predecessors has only A and B has no phi then
+18:                 inline B into A;  changed = true;
+19:             end if
+20:         end for
+21:         // 4. 删除不可达块，并把只剩一条入边的 phi 退化
+22:         changed |= removeUnreachableBlocks(func);
+23:     until not changed
+24:     return func;
+```
 ## 六、正确性陷阱
 
 | 陷阱 | 处理 |
