@@ -36,9 +36,9 @@ flowchart TD
 
 - **Module**：一个编译单元，相当于一个 `.c` 文件翻译后的产物；包含目标三元组（`riscv64-unknown-elf`）、数据布局（指针宽度、对齐）、全局变量、外部函数声明、若干 Function。
 - **Function**：包含参数列表、返回类型、若干 BasicBlock；可以带属性（如 `readonly`、`nounwind`）帮助优化器推断副作用。
-- **BasicBlock**：以标签（如 `entry:`、`while.body:`、`while.end:`）开头，**单入口、多出口**，最后一条指令必须是 terminator（`br` / `cond_br` / `switch` / `ret` / `unreachable`）。
+- **BasicBlock**：以标签（如 `entry:`、`while.body:`、`while.end:`）开头，单入口、多出口，最后一条指令必须是 terminator（`br` / `cond_br` / `switch` / `ret` / `unreachable`）。
 - **Instruction**：基本计算单元，结果用 `%name` 表示。
-- **SSA Value**：每个 SSA 名称**在函数内只被定义一次**；控制流汇合处用 `phi` 选择来自不同前驱的值。
+- **SSA Value**：每个 SSA 名称在函数内只被定义一次；控制流汇合处用 `phi` 选择来自不同前驱的值。
 
 ### 1.2 SSA 形式
 
@@ -158,7 +158,7 @@ join:
 }
 ```
 
-实现建议：先输出 `alloca/load/store` 形式以保证正确性，再以显式优化提升到 SSA。课程项目不强制要求 mem2reg；但若不实现，提升阶段只能停留在内存模型，无法利用寄存器直接持有局部变量，目标程序运行速度会明显较慢。
+实现建议：第三部分先输出 `alloca/load/store` 形式以保证正确性即可，不要求在这一步实现 mem2reg；把变量提升到 SSA 的 mem2reg 属于第五部分的机器无关优化，做法见 [mem2reg：把内存访问提升为 SSA](../optim/ir-mem2reg)。如果在第五部分也不实现，后续的常量传播、公共子表达式消除、死代码消除都只能停留在内存模型上，目标程序的访存也会明显偏多。
 
 ### 1.7 典型 ToyC 程序完整示例
 
@@ -398,7 +398,7 @@ flowchart TB
 
 #### 4.1.1 Affine Dialect：保留访问关系式
 
-Affine 方言的循环和内存访问都必须用**仿射表达式**（affine expression，形如 `d0 * 16 + d1 + 32`）描述，循环边界也是仿射的：
+Affine 方言的循环和内存访问都必须用仿射表达式（affine expression，形如 `d0 * 16 + d1 + 32`）描述，循环边界也是仿射的：
 
 ```mlir
 // 对应 ToyC: for i in [0, M): for j in [0, N): A[i][j] = ...
@@ -464,7 +464,7 @@ affine.for %ii = 0 to 128 step 32 {
 **缺点**
 
 1. 要求所有循环边界与下标都是仿射的，动态步长（如 `for i = 0; i < n; i++`，`n` 是运行时变量且与 `i` 无线性关系）就要 fallback 到 SCF。
-2. 多面体分析的编译时间和内存代价与循环嵌套深度、维度呈指数关系，深层循环会非常慢。
+2. 多面体分析的编译时间和内存代价与循环嵌套深度、维度呈指数关系，深层循环会明显变慢。
 3. 难以表达数据相关的控制流（如 `if (ptr != nullptr)`），要回退到 SCF/CF。
 
 #### .1.2 SCF Dialect：通用结构化控制流
@@ -609,9 +609,9 @@ MLIR 仅作参考架构，ToyC 项目禁止集成 MLIR。下面说明多层抽�
 局限
 
 - 项目规模过小时性价比低：ToyC 如果只是 `int main(){return 0;}`，为这一句话写一个完整 Dialect + conversion framework 比直接写自定义三地址码慢一个数量级。
-- IR 合法性约束强：每个 lowering 阶段都必须保持 IR 合法。例如把 SCF 降为 CF 时必须把 `iter_args` 显式转换为基本块参数并正确计算支配关系，否则 verify 失败；如果学生手工写错一个，会出现非常难以定位的崩溃。
-- 跨方言转换不自动：`Affine → SCF` 容易（依赖分析能跑），但 `SCF → CF` 涉及循环结构识别与 PHI 插入，写起来不轻松。
-- 构建系统门槛高：MLIR 通常作为 LLVM 项目的一部分构建，体量几十 GB；用 `apt` 装的发行版二进制往往版本对不上。建议用源码构建或预编译 release。
+- IR 合法性约束强：每个 lowering 阶段都必须保持 IR 合法。例如把 SCF 降为 CF 时必须把 `iter_args` 显式转换为基本块参数并正确计算支配关系，否则 verify 失败；如果手工写错一处，会出现难以定位的崩溃。
+- 跨方言转换不自动：`Affine → SCF` 容易（依赖分析能跑），但 `SCF → CF` 涉及循环结构识别与 PHI 插入，实现难度较大。
+- 构建成本高：MLIR 通常作为 LLVM 项目的一部分构建，体量几十 GB；用 `apt` 安装的发行版二进制往往版本对不上，建议用源码构建或预编译的 release。
 
 ## 四、选型建议
 

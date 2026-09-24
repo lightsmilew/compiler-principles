@@ -145,4 +145,4 @@ while (changed) {
 - 循环优化：识别回边（back edge）以识别自然循环，进而做 LICM、强度削减；
 - 寄存器分配：活跃区间正是从 CFG 的 `live_in/live_out` 派生出来的。
 
-下一步阅读：[死代码消除](ir-dce)。
+下一步阅读：[mem2reg：把内存访问提升为 SSA](ir-mem2reg)——它是把变量从内存搬进寄存器的第一步。

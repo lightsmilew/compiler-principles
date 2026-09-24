@@ -42,17 +42,21 @@ add  t3, t4, a0
 观察到一种朴素 spill 在每次 use 前都要 `lw` 一次，代价较大。
 
 ```mermaid
+%% 两块面板上下排布：Mermaid 会把后写的子图放在上方，因此这里先写 rematerialization，
+%% 渲染出来才是上=朴素 spill、下=rematerialization；面板内部竖排，整图不会被横向拉长。
 flowchart LR
+  subgraph rematerialization
+    direction TB
+    D2[addi t_scratch, t1, 1] --> M2[mul t2, t_scratch, a0]
+    D2 --> M3[add t3, t_scratch, a0]
+  end
   subgraph 朴素 spill
+    direction TB
     D1[addi t0, t1, 1] --> S1[sw t0, 16 sp]
     S1 --> L1[lw t4, 16 sp]
     L1 --> M1[mul t2, t4, a0]
     L1 --> L2[lw t4, 16 sp]
     L2 --> A1[add t3, t4, a0]
-  end
-  subgraph rematerialization
-    D2[addi t_scratch, t1, 1] --> M2[mul t2, t_scratch, a0]
-    D2 --> M3[add t3, t_scratch, a0]
   end
 ```
 

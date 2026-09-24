@@ -7,10 +7,10 @@ description: 详细说明 ToyC AST 到 LLVM IR 的转换方法、IR 设计和控
 
 # 第三部分 · 中间代码生成
 
-本部分只要求完成**设计和实验报告**，不要求提交独立的可编译程序。语法分析产生 AST 后，可以先经过选做的语义分析，再进入 LLVM IR 生成。最终报告必须说明 IR 的设计思路、数据结构、输出格式，以及每一种 ToyC 语法成分如何从 AST 转换为 LLVM IR。
+本部分只要求完成设计和实验报告，不要求提交独立的可编译程序。语法分析产生 AST 后，可以先经过选做的语义分析，再进入 LLVM IR 生成。最终报告必须说明 IR 的设计思路、数据结构、输出格式，以及每一种 ToyC 语法成分如何从 AST 转换为 LLVM IR。
 
 :::tip[本节示例基于 LLVM IR]
-下面所有示例都用 LLVM IR 编写，方便对照标准写法。这只是**参考**：你也可以设计并实现自己的**三地址码**（例如四元式 `(op, arg1, arg2, result)`）作为中间表示，只要在报告中说明它的数据结构，以及它如何降低到 RISC-V64GC 即可。
+下面所有示例都用 LLVM IR 编写，方便对照标准写法。这只是参考：你也可以设计并实现自己的三地址码（例如四元式 `(op, arg1, arg2, result)`）作为中间表示，只要在报告中说明它的数据结构，以及它如何降低到 RISC-V64GC 即可。
 :::
 
 ## 一、IR 的作用与选择
@@ -18,7 +18,7 @@ description: 详细说明 ToyC AST 到 LLVM IR 的转换方法、IR 设计和控
 AST 适合表达源语言结构，但不适合直接做机器无关优化或指令选择。中间表示把前端和后端隔开：前端生成 IR，优化器处理 IR，后端再把 IR 翻译为 RISC-V64GC。
 
 ```mermaid
-flowchart LR
+flowchart TB
   A[AST] --> B[LLVM IR 生成]
   B --> C[LLVM 基本块与 SSA]
   C --> D[代码优化]
@@ -28,7 +28,7 @@ flowchart LR
 
 **为什么不让 AST 直接生成汇编？** 因为这样每加一条优化、每换一个目标机器都要重写前端。引入 IR 后，"前端 → IR"只写一次，"IR 优化"是通用的，"IR → 目标机器"可以针对不同机器分别实现，三者解耦。
 
-本部分以 **LLVM IR 作为主要示例**，也可以使用自定义 IR；此时必须在报告中说明模块、函数、基本块、值、指令和控制流边的数据结构，以及如何降低到 RISC-V64GC。
+本部分以 LLVM IR 作为主要示例，也可以使用自定义 IR；此时必须在报告中说明模块、函数、基本块、值、指令和控制流边的数据结构，以及如何降低到 RISC-V64GC。
 
 | 选择 | 优点 | 代价 |
 | --- | --- | --- |
@@ -45,7 +45,7 @@ entry:
 }
 ```
 
-其中 `Module` 包含函数，函数包含基本块，基本块包含按顺序执行的指令；`%a`、`%b` 和 `%sum` 是 SSA 值，**每个 SSA 值只定义一次**。ToyC 的变量声明、赋值和表达式可以先降低到 `alloca`、`load`、`store`，再通过 mem2reg 形成 SSA；条件和循环使用基本块、条件分支和 `phi` 指令表达。
+其中 `Module` 包含函数，函数包含基本块，基本块包含按顺序执行的指令；`%a`、`%b` 和 `%sum` 是 SSA 值，每个 SSA 值只定义一次。ToyC 的变量声明、赋值和表达式先降低到 `alloca`、`load`、`store`（见本部分第九节）；条件和循环使用基本块、条件分支和 `phi` 指令表达。把变量从内存提升到 SSA 的 mem2reg 属于第五部分的优化内容。
 
 关键约束：
 
@@ -56,7 +56,7 @@ entry:
 
 ### SSA 在本实验中的使用
 
-SSA（Static Single Assignment，静态单赋值）要求每个 SSA 名称在一个函数中只定义一次。它**不限制 ToyC 源变量的赋值次数**，而是把每次赋值改写成一个新的 SSA 值：
+SSA（Static Single Assignment，静态单赋值）要求每个 SSA 名称在一个函数中只定义一次。它不限制 ToyC 源变量的赋值次数，而是把每次赋值改写成一个新的 SSA 值：
 
 ```c
 x = a + 1;
@@ -97,14 +97,14 @@ flowchart TD
 ```
 
 :::tip[推荐实现顺序]
-建议先用 `alloca`、`load`、`store` 表示 ToyC 局部变量，再选做地执行 mem2reg 转换为 SSA。这样实现顺序更简单：**先保证地址与控制流正确，再处理 `phi` 插入**。
+本部分建议先用 `alloca`、`load`、`store` 表示 ToyC 局部变量，这样实现顺序最直接：先把地址与控制流做对，`phi` 插入留到后面。把内存访问提升为 SSA 的 mem2reg 放在[第五部分](part5-ir-optimization#mem2reg)，不在这里实现。
 :::
 
 ## 三、符号表与作用域
 
 ### 3.1 数据结构
 
-ToyC 允许在语句块中声明局部变量，内层可以遮蔽外层同名变量。生成 IR 时需要维护**嵌套作用域栈**，每进入一个块压入新层，退出时弹出：
+ToyC 允许在语句块中声明局部变量，内层可以遮蔽外层同名变量。生成 IR 时需要维护嵌套作用域栈，每进入一个块压入新层，退出时弹出：
 
 ```
 SymbolTable {
@@ -115,7 +115,7 @@ SymbolTable {
 Symbol {
     name: string
     address: Value                      // alloca 产生的地址（alloca/load/store 模式）
-    // 或者：value: Value               // SSA 模式（mem2reg 后）
+    // 或者：value: Value               // SSA 模式（已做 mem2reg，见第五部分）
     is_constant: bool
     scope_level: int                    // 所在作用域深度
 }
@@ -195,11 +195,10 @@ LoopContext { head: BasicBlock, exit: BasicBlock }
  2:     module = new Module("toyir");
  3:     module.target_triple = "riscv64-unknown-elf";   // 目标平台 / target
  4:     declareExternalFunctions(module);                // 见第七节
- 5:     emitGlobals(ast.globals, module);                // 全局变量 / global variables
- 6:     for each func in ast.functions do
- 7:         emitFunction(func, module);
- 8:     end for
- 9:     return module;
+ 5:     for each func in ast.functions do                // ToyC 没有全局变量，只有函数
+ 6:         emitFunction(func, module);
+ 7:     end for
+ 8:     return module;
 ```
 
 **算法 3 · 函数生成（emitFunction）**
@@ -269,7 +268,7 @@ fillTarget(label_name, block):                     // 目标块创建后调用
         if false_t == label_name: br_inst.false_target = block;
 ```
 
-推荐使用**策略一**，代码更直观。
+推荐使用策略一，代码更直观。
 
 ## 五、表达式转换
 
@@ -319,7 +318,7 @@ emitUnary(op, v):
 
 ### 5.3 短路求值：逻辑与和逻辑或
 
-`&&` 和 `||` 具有**短路语义**：求值过程中可能跳过部分子表达式。因此它们不能简单地递归生成值，而要用**带真/假出口的条件生成**方式处理。
+`&&` 和 `||` 具有短路语义：求值过程中可能跳过部分子表达式。因此它们不能简单地递归生成值，而要用带真/假出口的条件生成方式处理。
 
 | 表达式类型 | `emit_expr` | `emit_cond` 的跳转行为 |
 | --- | --- | --- |
@@ -427,7 +426,7 @@ store i32 %y_val, ptr %y
 
 ### 6.1 if-else 与 else-if 链
 
-`if-else` 的翻译见算法 4。连续的 `if-else-if-else` 链在 AST 中本身就是**嵌套的 If 节点**（else 部分又是另一个 If），递归 `emitStmt` 自然处理，无需特殊逻辑：
+`if-else` 的翻译见算法 4。连续的 `if-else-if-else` 链在 AST 中本身就是嵌套的 If 节点（else 部分又是另一个 If），递归 `emitStmt` 自然处理，无需特殊逻辑：
 
 ```c
 if (score >= 90) grade = 65;
@@ -516,7 +515,7 @@ declareExternalFunctions(module):
     module.declare("putch",   void, [i32]);
 ```
 
-函数调用按**从左到右**生成实参（保留副作用顺序）：
+函数调用按从左到右生成实参（保留副作用顺序）：
 
 ```c
 putint(add(a, b));
@@ -529,9 +528,33 @@ putint(add(a, b));
     call void @putint(i32 %sum)
 ```
 
-## 八、全局变量
+## 八、常量与全局变量（扩展）
 
-ToyC 支持全局变量（在所有函数之外声明），生成全局定义的地址：
+ToyC 不支持全局变量：`CompUnit` 只由函数定义组成，变量和常量都声明在函数体内。
+因此 IR 的顶层只有外部函数声明与函数定义，不会出现 `@g = global ...` 这样的全局对象。
+
+需要特别处理的是 `const int`：
+
+```c
+const int LIMIT = 3;
+int x = LIMIT * 2 + 1;
+```
+
+`const` 的值在编译期就是已知的，推荐在语义分析阶段把它记进符号表并直接常量折叠，
+于是 IR 里根本不出现这个变量：
+
+```llvm
+    %x = alloca i32
+    store i32 7, ptr %x            ; 3 * 2 + 1 在编译期折叠为 7
+```
+
+:::tip[也可以当普通局部变量]
+不区分 `const` 与普通局部变量，照常 `alloca` + `store` 写入初值，语义上同样正确——语言保证常量不会再被赋值。
+两种做法都可以，在报告里说明即可。
+:::
+
+:::info[扩展到全局变量（可选）]
+若你在后续实验里自行扩展了全局变量（SysY 支持），可以参考下面的写法生成；ToyC 的评测用例不会用到：
 
 ```c
 int global_counter = 0;
@@ -549,42 +572,32 @@ entry:
     ret i32 %new
 }
 ```
+:::
 
-## 九、mem2reg 简介（选做）
+## 九、内存访问型 IR 与 mem2reg（详见第五部分）
 
-`alloca/load/store` 模式实现简单，但 `load` 和 `store` 阻断了 SSA 的 Use-Def 分析。mem2reg 识别"只通过 store 写入、只通过 load 读取、且不逃逸出函数"的局部变量，把内存访问提升为 SSA 值：
+第三部分只要求把 ToyC 的局部变量统一降低到 `alloca` / `load` / `store`：每个变量占一块栈空间，声明处发 `alloca`，赋值处发 `store`，读取处发 `load`。
+
+这种做法的优点是实现简单、正确性容易保证：变量始终有一个稳定的栈地址，控制流汇合处不需要 `phi`，先把地址与控制流做对即可。
+
+代价是变量始终保存在栈上，每次读写都要访问内存，寄存器只负责在 `load` / `store` 之间传递数据，无法承载计算；同时 `load` 得到的是内存中的值而非某条指令的结果，会切断 SSA 的 Use-Def 链，之后的常量传播、公共子表达式消除与死代码消除都难以进行。
 
 ```llvm
-; 优化前（alloca 模式）
+; 内存访问型 IR：变量在栈上
 %x = alloca i32
 store i32 1, ptr %x
 %v = load i32, ptr %x
 ret i32 %v
 ```
 
+把这种 IR 提升为寄存器（SSA）型 IR 的算法称为 mem2reg：它找出只被 `store` 写入、只被 `load` 读取、地址不逃逸出函数的局部变量，将其替换为一串 SSA 值。
+
 ```llvm
-; 优化后（SSA 模式）
+; mem2reg 之后：变量由 SSA 值表示
 ret i32 1
 ```
 
-**算法 9 · mem2reg（dominance-based SSA construction，选做）**
-
-**输入（Input）：** 采用 alloca/load/store 的函数 `func`。
-**输出（Output）：** 消除可提升 alloca 后的 SSA 形式函数。
-
-```
- 1: mem2reg(func):
- 2:     DT = computeDominanceTree(func);                // 1. 计算支配树
- 3:     for each alloca a in func do
- 4:         if not promotable(a) then continue; end if    // 只处理不逃逸的局部变量
- 5:         S = computePhiPlacement(a, DT);               // 2. 计算需要插入 phi 的基本块入口
- 6:         for block in S do insertPhi(block, a); end for // 3. 插入 phi
- 7:     end for
- 8:     renameValues(func, DT);                           // 4. 重命名所有 SSA 值（栈式重命名）
- 9:     removeDeadAllocas(func);
-```
-
-mem2reg 不是本部分必做内容，但完成后可以显著简化第五部分的常量传播、死代码消除等优化。
+本部分不要求实现 mem2reg。它的必要性、提升条件、支配树与 `phi` 插入算法、完整转换示例和优化效果，统一放在[第五部分 · mem2reg](part5-ir-optimization#mem2reg) 介绍。
 
 ## 十、完整转换示例
 

@@ -1,5 +1,5 @@
 ---
-sidebar_position: 6
+sidebar_position: 7
 sidebar_label: 循环不变代码外提
 title: 循环不变代码外提（LICM）
 description: 把循环体内不变的计算移出循环，减少重复执行
@@ -52,21 +52,25 @@ H: ...
 ```
 
 ```mermaid
+%% 两块面板上下排布：Mermaid 会把后写的子图放在上方，因此这里先写「插入预头」，
+%% 渲染出来才是上=原始、下=插入预头；面板内部再竖排，整图不会被横向拉长而缩小。
 flowchart LR
-  subgraph 原始
-    A1[pre1] -- c 真 --> H1[H]
-    A1 -- c 假 --> N[next]
-    A2[pre2] --> H1
-    H1 --> B1[body]
-    B1 -- back --> H1
-  end
   subgraph 插入预头
+    direction TB
     A3[pre1] -- c 真 --> PH[preheader]
     A3 -- c 假 --> N2[next]
     A4[pre2] --> PH
     PH --> H2[H]
     H2 --> B2[body]
     B2 -- back --> H2
+  end
+  subgraph 原始
+    direction TB
+    A1[pre1] -- c 真 --> H1[H]
+    A1 -- c 假 --> N[next]
+    A2[pre2] --> H1
+    H1 --> B1[body]
+    B1 -- back --> H1
   end
 ```
 
@@ -132,14 +136,15 @@ H:
 - 副作用：循环外多了一条指令，但总执行次数下降，净收益为正。
 
 ```mermaid
+%% 同上：先写「外提后」，渲染出来才是上=原始、下=外提后。
 flowchart LR
-  subgraph 原始
-    PH1[preheader] --> H1[H: add → mul → body]
-    H1 -- back --> H1
-  end
   subgraph 外提后
     PH2[preheader: add] --> H2[H: mul → body]
     H2 -- back --> H2
+  end
+  subgraph 原始
+    PH1[preheader] --> H1[H: add → mul → body]
+    H1 -- back --> H1
   end
 ```
 
@@ -167,7 +172,7 @@ bool is_loop_invariant(Instruction* I, Loop* L) {
 | --- | --- |
 | [常量传播](ir-cprop) | 先传播常量，LICM 能识别更多不变指令 |
 | [DSE](ir-dce) | LICM 后循环体内可能多出死代码，交 DCE 清理 |
-| [强度削减](asm-strength-reduction) | LICM 后的循环体是强度削减的良好输入 |
+| [强度削减](ir-strength-reduction) | LICM 后的循环体是强度削减的良好输入（除常量换魔数乘法，见[魔数法](ir-strength-reduction)、[目标代码层](asm-strength-reduction)） |
 | 归纳变量分析 | LICM 把循环不变量外提后，剩下的循环变量更易识别为归纳变量 |
 
 ## 七、实现步骤
@@ -193,4 +198,4 @@ flowchart TD
 | 浮点运算的中间舍入 | ToyC 只支持整数，不涉及此问题 |
 | 嵌套循环 | 内层外提的指令在外层仍是不变的，可以被外层 LICM 继续外提 |
 
-下一步阅读：[活跃区间与冲突图](asm-liveness) 进入目标代码优化章节。
+下一步阅读：[强度削减：乘法换移位与魔数法除法](ir-strength-reduction)——循环体是不变代码外提之后最需要强度削减的地方。

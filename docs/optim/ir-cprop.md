@@ -1,5 +1,5 @@
 ---
-sidebar_position: 3
+sidebar_position: 4
 sidebar_label: 常量折叠 / 传播
 title: 常量折叠、常量传播与复制传播
 description: 在编译期直接计算常量表达式，并沿 SSA Use-Def 链替换已知常量
@@ -149,7 +149,7 @@ ToyC 只支持整数，可以放心应用。
 - 这套循环通常只需 2~3 轮就达到不动点。
 
 ```mermaid
-flowchart LR
+flowchart TB
   A[常量折叠] --> B[复制传播]
   B --> C[常量传播]
   C --> D[代数简化]

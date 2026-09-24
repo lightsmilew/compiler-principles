@@ -9,14 +9,14 @@ description: 根据 ToyC 文法构造 AST，比较递归下降、LL(1) 与 LR �
 
 ## 一、实验目标
 
-语法分析器（parser）读取第一部分产出的 Token 流，检查它是否**符合 ToyC 文法**，并构造出后续语义分析和 IR 生成要用的**抽象语法树（AST）**。
+语法分析器（parser）读取第一部分产出的 Token 流，检查它是否符合 ToyC 文法，并构造出后续语义分析和 IR 生成要用的抽象语法树（AST）。
 
 :::tip[先建立直觉]
 词法分析把程序切成一个个"词"；语法分析接着按语法规则把这些词组织成一棵树，树的形状直接反映了运算的先后顺序。
 :::
 
 ```mermaid
-flowchart LR
+flowchart TB
   T[Token 流] --> P[语法分析器]
   P --> A[AST]
   P --> R[语法错误]
@@ -40,14 +40,19 @@ flowchart LR
 
 ```text
 CompUnit    -> FuncDef+
+FuncDef     -> ('int' | 'void') ID '(' [ Param (',' Param)* ] ')' Block
+Param       -> 'int' ID
+Block       -> '{' BlockItem* '}'
+BlockItem   -> Decl | Stmt
+Decl        -> VarDecl | ConstDecl
+VarDecl     -> 'int' VarDef (',' VarDef)* ';'
+VarDef      -> ID [ '=' Expr ]
+ConstDecl   -> 'const' 'int' ConstDef (',' ConstDef)* ';'
+ConstDef    -> ID '=' Expr
 Stmt        -> Block | ';' | Expr ';' | ID '=' Expr ';'
-             | 'int' ID '=' Expr ';'
              | 'if' '(' Expr ')' Stmt [ 'else' Stmt ]
              | 'while' '(' Expr ')' Stmt
              | 'break' ';' | 'continue' ';' | 'return' Expr ';'
-Block       -> '{' Stmt* '}'
-FuncDef     -> ('int' | 'void') ID '(' [ Param (',' Param)* ] ')' Block
-Param       -> 'int' ID
 Expr        -> LOrExpr
 LOrExpr     -> LAndExpr | LOrExpr '||' LAndExpr
 LAndExpr    -> RelExpr | LAndExpr '&&' RelExpr
@@ -58,11 +63,11 @@ UnaryExpr   -> PrimaryExpr | ('+' | '-' | '!') UnaryExpr
 PrimaryExpr -> ID | NUMBER | '(' Expr ')' | ID '(' [ Expr (',' Expr)* ] ')'
 ```
 
-其中 `RelOp`、`AddOp`、`MulOp` 分别展开为[文法页](../reference/grammar)中对应的运算符集合。库函数（`getint`、`putint` 等）仍按普通 `ID` 和函数调用解析，不加入文法特殊产生式。
+这是[文法页](../reference/grammar)的等价写法：`RelOp`、`AddOp`、`MulOp` 分别展开为文法页中对应的运算符集合；声明（含 `const`）和语句统一由 `BlockItem` 展开，后面写 FIRST/FOLLOW 集时会方便一些；ToyC 没有全局变量，`CompUnit` 只会展开出一串函数定义。库函数（`getint`、`putint` 等）仍按普通 `ID` 和函数调用解析，不加入文法特殊产生式。
 
 ## 三、从 Token 到 AST 的转换逻辑
 
-解析器的每个函数对应一个非终结符：先检查当前 Token 是否能作为该产生式的起始符号，匹配终结符后递归调用子规则，最后构造 AST 节点。AST **不保留没有语义的括号和分号**，但保留源位置，用于后续报错。
+解析器的每个函数对应一个非终结符：先检查当前 Token 是否能作为该产生式的起始符号，匹配终结符后递归调用子规则，最后构造 AST 节点。AST 不保留没有语义的括号和分号，但保留源位置，用于后续报错。
 
 ### 结合性与优先级：以 `a + b * c` 为例
 
@@ -115,11 +120,11 @@ flowchart TD
 27:     error("expected primary expression");           // 出错提示
 ```
 
-**为什么用循环而不是左递归？** 文法里写的是 `AddExpr -> AddExpr '+' MulExpr`（**左递归**）。直接写成函数会无限递归，所以要改写成循环（如上），或改写文法为 `E -> T E'`、`E' -> '+' T E' | ε`。两种写法等价，循环写法更直观。
+**为什么用循环而不是左递归？** 文法里写的是 `AddExpr -> AddExpr '+' MulExpr`（左递归）。直接写成函数会无限递归，所以要改写成循环（如上），或改写文法为 `E -> T E'`、`E' -> '+' T E' | ε`。两种写法等价，循环写法更直观。
 
 ### LL(1)：计算 FIRST / FOLLOW 集
 
-LL(1) 需要一个**预测分析表**，而表的构造依赖 FIRST 和 FOLLOW 集。
+LL(1) 需要一个预测分析表，而表的构造依赖 FIRST 和 FOLLOW 集。
 
 **算法 2 · 计算 FIRST / FOLLOW 集（FIRST / FOLLOW Computation）**
 
@@ -153,7 +158,7 @@ LL(1) 需要一个**预测分析表**，而表的构造依赖 FIRST 和 FOLLOW �
 22: return FIRST, FOLLOW;
 ```
 
-以 `AddExpr -> MulExpr | AddExpr AddOp MulExpr` 为例，可得到 `FIRST(MulExpr) ⊆ FIRST(AddExpr)`、`FOLLOW(AddExpr) ⊇ { '+', '-', ')' , ';' }`，进而填出预测分析表。若表中某个 `M[A, a]` 出现两个产生式（**冲突**），说明文法不是 LL(1)。
+以 `AddExpr -> MulExpr | AddExpr AddOp MulExpr` 为例，可得到 `FIRST(MulExpr) ⊆ FIRST(AddExpr)`、`FOLLOW(AddExpr) ⊇ { '+', '-', ')' , ';' }`，进而填出预测分析表。若表中某个 `M[A, a]` 出现两个产生式（冲突），说明文法不是 LL(1)。
 
 **算法 3 · LL(1) 表驱动解析（Table-Driven LL(1) Parsing）**
 
@@ -240,7 +245,7 @@ LR 分析的能力比 LL(1) 更强，代价是构造更复杂。
  3: while not eof() and lookahead() ∉ sync do
  4:     advance();                                     // 丢弃 Token，直到遇到同步符号
  5: end while
- 6: if lookahead() ∈ { ';', '}' } then advance(); end if  // 吃掉同步符号
+ 6: if lookahead() ∈ { ';', '}' } then advance(); end if  // 跳过直至同步符号
  7: return current_position();                         // 继续解析后续语句
 ```
 
@@ -252,16 +257,17 @@ LR 分析的能力比 LL(1) 更强，代价是构造更复杂。
 Program(functions)
 Function(return_type, name, params, body)
 Block(statements)
+Decl(name, initializer, is_const)     // 一条声明语句可含多个声明项，拆成一组节点
 If(condition, then_stmt, else_stmt?)
 While(condition, body)
+Empty / Break / Continue
 Assign(name, value)
-VarDecl(name, initializer)
 Binary(op, lhs, rhs)
 Unary(op, operand)
 Call(name, args)
 Number(value)
 Variable(name)
-Return(value)
+Return(value?)
 ```
 
 AST 应丢弃不影响语义的括号和分隔符，但保留源位置，便于错误报告。
@@ -270,9 +276,184 @@ AST 应丢弃不影响语义的括号和分隔符，但保留源位置，便于�
 
 语法分析完成后，可以继续阅读[选做 · 语义分析](./optional-semantic)，在 AST 与 IR 生成之间加入符号表、作用域、类型和控制流约束检查。语义分析不属于本部分的必做提交。
 
-## 六、提交物
+## 六、输入输出规范与统一样例
 
-第二部分必须提交可以编译的完整文件。程序应读取 Token 流或 ToyC 源程序，按命令行参数选择解析模式，并输出规定格式的 AST 或分析过程；不能只提交算法片段。
+### 输入形式
+
+- 输入为 ToyC 源代码，从标准输入流读入：
+
+  ```bash
+  echo "int a = 1;" | ./compiler --check-ast > test.check-ast
+  ```
+
+- 本地调试时用文件重定向：
+
+  ```bash
+  ./compiler --check-ast < test.c > test.check-ast
+  ```
+
+### 输出形式
+
+所有输出都写到标准输出流；本地调试时用重定向写入文件，例如 `./compiler --check-ast < test.c > test.check-ast`，文件名建议用 `.check-ast` 后缀，便于与助教脚本对账。
+
+源代码没有语法错误时，输出一行：
+
+```text
+accept
+```
+
+源代码存在语法错误时，先输出一行 `reject`，随后每行给出一个错误位置，按出现顺序排列：
+
+```text
+<行号>[ 空格 <报错信息>]
+```
+
+报错信息是可选字段，用空格与行号分隔，写不写都不影响判分。例如：
+
+```text
+reject
+12 Lack of ')'
+34 Unterminated comment
+56 Lack of ';'
+```
+
+也可以只写行号：
+
+```text
+reject
+12
+34
+56
+```
+
+:::warning[判分只看首行和行号]
+自动评测只检查两件事：首行是 `accept` 还是 `reject`，以及 `reject` 之后各行的行号。
+
+- 行号从 `1` 开始（源程序的第一行是第 1 行）；
+- 行号取的是解析器发现错误时手上那个意外 Token 所在的行。例如少了 `;`，报出的就是它后面那个 Token 所在的行；
+- 每个测试用例里的语法错误都独立成一处，不会出现"一个错误跨多行"或"一行多错"。
+:::
+
+### 样例输入
+
+与词法分析、目标代码生成共用同一个样例程序：
+
+```c
+// ToyC 综合示例：覆盖文法中的全部成分
+/* ToyC 不支持全局变量，所有定义都写在函数里 */
+
+int sum(int n, int from) {
+    int s = 0;
+    while (from <= n) {
+        if (from == 2) {
+            from = from + 1;
+            continue;
+        }
+        s = s + from;
+        from = from + 1;
+    }
+    return s;
+}
+
+void show(int v) {
+    putint(v);
+    ;
+}
+
+int main() {
+    const int LIMIT = 3, STEP = 1;
+    int a = 5, b;
+    b = +a - -1;
+    int c = (a + b) * 2 / 3 % 4;
+    {
+        int a = 1;
+        c = c + a;
+    }
+    if (a >= b && b != 0 || !(a == LIMIT)) {
+        c = c + sum(a, STEP);
+    } else {
+        c = c - 1;
+    }
+    while (c > 0) {
+        c = c - 1;
+        if (c == 5) continue;
+        if (c < 2) break;
+        show(c);
+    }
+    return c;
+}
+```
+
+### 样例输出
+
+这个程序没有语法错误，因此只输出一行：
+
+```text
+accept
+```
+
+### 错误样例
+
+再给一个故意写错的程序，覆盖几类最常见的语法错误：
+
+```c
+int f(int x, int y {
+    int z = x + y  / 2 % 3;
+    if (z < 10 && z > 0 || z <= 20 && z >= 5 || z == 7 || z != 8) {
+        z = z + 1;
+    } else {
+        z = z - ;
+    }
+    while (z < 100) {
+        z = z + 1;
+        if z == 50) break;
+        continue;
+    }
+    return z;
+
+
+void g() {
+    int i = 0;
+    i = f(i, i);
+}
+
+int main() {
+    int result = 0;
+    result = f(, 2);
+    g();
+    return result;
+}
+```
+
+五处错误逐个说明：
+
+| 行号 | 出错位置 | 语法错误 |
+| ---: | --- | --- |
+| 1 | `int f(int x, int y {` | 形参列表缺少 `)` |
+| 6 | `z = z - ;` | 二元运算符 `-` 缺少右操作数 |
+| 10 | `if z == 50) break;` | `if` 的条件缺少 `(` |
+| 16 | `void g() {` | 上一个函数体缺少 `}`，`void g()` 被当成 `f` 函数体里的语句 |
+| 23 | `result = f(, 2);` | 实参列表里多了一个逗号，缺少实参 |
+
+对应的输出（报错信息可以省略）：
+
+```text
+reject
+1 Lack of ')'
+6 Lack of expression
+10 Lack of '('
+16 Lack of '}'
+23 Lack of expression
+```
+
+第 16 行最能说明问题：一个 `}` 没写上，后面整个 `void g()` 就被解析器当成了 `f` 函数体里的语句，
+所以报错落在第 16 行的 `void` 上。这提醒你错误恢复必须能继续往下走——报完当前错误后，
+跳过 Token 直到语句级同步集合（`;`、`}`、`if`、`while`、`return`）再继续解析，
+这样一个错误只产生一条报告，不会刷屏。具体策略见「错误恢复」一节的 panic-mode 恢复。
+
+## 七、提交物
+
+第二部分必须提交可以编译的完整文件。程序应读取 ToyC 源程序，按命令行参数选择解析模式，并按第六节的规定输出 `accept` / `reject`；不能只提交算法片段。
 
 ```bash
 cmake -S . -B build

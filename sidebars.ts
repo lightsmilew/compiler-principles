@@ -39,15 +39,20 @@ const sidebars: SidebarsConfig = {
       link: {
         type: 'generated-index',
         title: '机器无关代码优化',
-        description: 'LLVM IR 层的中端优化：基本块、死代码、常量传播、CSE、控制流简化、LICM。',
+        description:
+          'LLVM IR 层的机器无关优化：基本块与 CFG、mem2reg、常量传播、CSE、死代码消除、控制流简化、循环不变代码外提、强度削减、函数内联、基本块重排。',
       },
       items: [
         'optim/ir-cfg',
+        'optim/ir-mem2reg',
         'optim/ir-dce',
         'optim/ir-cprop',
         'optim/ir-cse',
         'optim/ir-cfg-simplify',
         'optim/ir-licm',
+        'optim/ir-strength-reduction',
+        'optim/ir-inline',
+        'optim/ir-block-layout',
       ],
     },
     {

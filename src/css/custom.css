@@ -807,3 +807,44 @@ hr {
     transform: none;
   }
 }
+/* --------------------------------------------------------------------------
+   12. Mermaid 标签底部被裁切修复
+   --------------------------------------------------------------------------
+   Mermaid 开启 htmlLabels 后，节点与连线文字都放进 <foreignObject>，里面
+   包着一个真实的 <p>。Mermaid 自己按 line-height: 1.5 估算每行文字的高度，
+   但图表位于 .theme-doc-markdown 内部，第 303 行的 `.theme-doc-markdown p`
+   （line-height: 1.8）同样命中这些 <p>，于是每行实际比估算值高出 0.3em。
+
+   结果是：单行标签底部被削掉几个像素；用了 <br/> 的多行标签按行数累加误差，
+   最后一行会被明显切断——标签越长，切得越多，看起来就像"文字太长被截断"，
+   其实根因是行高不一致，而不是字数。
+
+   修法两步：
+   1) 把标签内的行高压回 Mermaid 的 1.5，让文字正好落在 foreignObject 里；
+   2) 放开 foreignObject 的裁剪，作为字体回退、浏览器缩放等情况下的兜底。
+   -------------------------------------------------------------------------- */
+.docusaurus-mermaid-container foreignObject {
+  overflow: visible;
+}
+
+.docusaurus-mermaid-container p {
+  margin: 0;
+  padding: 0;
+  line-height: 1.5;
+}
+
+.docusaurus-mermaid-container .nodeLabel,
+.docusaurus-mermaid-container .edgeLabel,
+.docusaurus-mermaid-container .label {
+  line-height: 1.5;
+}
+
+/* --------------------------------------------------------------------------
+   13. 分类索引页（generated-index）的卡片图标
+   --------------------------------------------------------------------------
+   DocCardList 默认给每张卡片配一个 📄️ 表情，同一个页面上会重复出现十几次，
+   观感很像模板生成的内容。这里统一隐藏，只保留标题与摘要文字。
+   -------------------------------------------------------------------------- */
+.theme-doc-card-icon {
+  display: none;
+}

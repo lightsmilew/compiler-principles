@@ -7,14 +7,14 @@ description: 将 LLVM IR 翻译为 RISC-V64GC 汇编，建立可运行的后端�
 
 # 第四部分 · 目标代码生成
 
-本部分把第三部分生成的 LLVM IR 翻译为**可运行的 RISC-V64GC 汇编**。先完成正确的基线后端，再在第五、六部分分别优化 IR 和目标代码。尽管我们把寄存器分配放在了优化部分，但实现寄存器分配的编译器尚且才算一个完整的编译器，因此完成该部分实验，**你们必须要实现一种寄存器分配算法**。
+本部分把第三部分生成的 LLVM IR 翻译为可运行的 RISC-V64GC 汇编。先完成正确的基线后端，再在第五、六部分分别优化 IR 和目标代码。尽管我们把寄存器分配放在了优化部分，但实现寄存器分配的编译器尚且才算一个完整的编译器，因此完成该部分实验，你们必须要实现一种寄存器分配算法。
 
 :::tip[先建立直觉]
 目标代码生成是编译的最后一步：把与机器无关的 IR 变成能在 RISC-V 上运行的汇编，主要解决三件事——用哪些指令、每个值放进哪个寄存器、放不下的值放到栈里的什么位置。
 :::
 
 ```mermaid
-flowchart LR
+flowchart TB
   I[LLVM IR] --> S[指令选择]
   S --> A[寄存器分配]
   A --> F[栈帧布局]
@@ -129,7 +129,7 @@ store i32 %result, ptr %x
 
 #### zext i1 → 直接使用比较结果
 
-把 `i1` 扩展为 `i32`（0 → 0，1 → 1）。RISC-V 寄存器是 64 位，`i1` 在寄存器里本身就是 0/1，因此**大多数情况直接复制即可**；只有在需要"取反"语义时才用 `seqz` / `snez` 之类的指令：
+把 `i1` 扩展为 `i32`（0 → 0，1 → 1）。RISC-V 寄存器是 64 位，`i1` 在寄存器里本身就是 0/1，因此大多数情况直接复制即可；只有在需要"取反"语义时才用 `seqz` / `snez` 之类的指令：
 
 ```llvm
 %b = zext i1 %a to i32
@@ -169,7 +169,7 @@ store i32 %val, ptr %ptr_val  ->   sw   src_reg, 0(dest_reg)
 
 **问题**：`phi` 是 SSA 特有的指令，RISC-V 中没有对应硬件指令。
 
-**分析**：每个 `phi` 出现在基本块入口，表示"从不同前驱边进入时取不同值"。而在顺序执行的 RISC-V 中，进入一个基本块时控制流来自某个确定的前驱块。因此，可以把 phi 的"选值"动作**提前到每个前驱块的末尾**执行：
+**分析**：每个 `phi` 出现在基本块入口，表示"从不同前驱边进入时取不同值"。而在顺序执行的 RISC-V 中，进入一个基本块时控制流来自某个确定的前驱块。因此，可以把 phi 的"选值"动作提前到每个前驱块的末尾执行：
 
 ```mermaid
 flowchart TD
@@ -217,7 +217,7 @@ join:
 11:     end for
 ```
 
-**注意"并行拷贝"问题**：一个基本块入口可能有多条 `phi`，它们之间可能互相引用（例如 `phi1 = phi[phi2, ...]`、`phi2 = phi[phi1, ...]`），必须**同时**更新，否则会覆盖还没读完的值。解决办法是引入临时寄存器或临时槽，先全部读出、再全部写入：
+**注意"并行拷贝"问题**：一个基本块入口可能有多条 `phi`，它们之间可能互相引用（例如 `phi1 = phi[phi2, ...]`、`phi2 = phi[phi1, ...]`），必须同时更新，否则会覆盖还没读完的值。解决办法是引入临时寄存器或临时槽，先全部读出、再全部写入：
 
 **算法 3 · 并行拷贝式的 phi 前驱复制（Parallel Copy at Predecessors）**
 
@@ -311,7 +311,7 @@ flowchart LR
 | 第 3–8 个 | `a2–a7` | `fa2–fa7` |
 | 第 9 个起 | 溢出到栈 | 溢出到栈 |
 
-返回值：`a0`（整数）/ `fa0`（浮点）。此外还要遵守：**栈 16 字节对齐**、保存/恢复返回地址 `ra`、被调用者保存寄存器（`s0–s11`）。
+返回值：`a0`（整数）/ `fa0`（浮点）。此外还要遵守：栈 16 字节对齐、保存/恢复返回地址 `ra`、被调用者保存寄存器（`s0–s11`）。
 
 ### 3.2 参数传递的实现
 
@@ -345,7 +345,7 @@ flowchart LR
 **溢出参数的具体做法**：
 
 - **调用者**负责在栈上分配溢出区（在当前栈帧内）；
-- 溢出参数按**从右到左**的顺序压栈，使第 9 个参数落在最低地址（`sp + 0`），被调函数用 `sp` + 固定偏移访问。
+- 溢出参数按从右到左的顺序压栈，使第 9 个参数落在最低地址（`sp + 0`），被调函数用 `sp` + 固定偏移访问。
 
 ```asm
     ; 假设有 9 个整数参数 arg0 ~ arg8
@@ -457,54 +457,52 @@ declare void @putint(i32)
 15:     emit("  ret");
 ```
 
-## 五、全局变量与常量
+## 五、常量与数据段
 
-### 5.1 全局变量的生成
+### 5.1 常量声明 `const int`
 
-```llvm
-@global_var = global i32 0
+ToyC 不支持全局变量，`const int` 只能写在函数体内。它的值在编译期就已经确定，
+因此不必占用单独的存储单元：把值当成立即数用，或者直接折叠进表达式，生成的代码里就看不到这个变量了。
+
+```c
+const int LIMIT = 3;
+int x = LIMIT * 2 + 1;
 ```
 
 ```asm
-    .data
-    .globl global_var
-global_var:
-    .word 0
+        li    t0, 7              ; 3 * 2 + 1 在编译期折叠为 7
 ```
 
-:::note[ToyC 的全局变量]
-基础 ToyC 文法只含 `int` 标量全局变量，因此只需 `.word`。若你实现了数组等扩展类型，再按下面的方式为数组预留空间。
+:::tip[也可以当普通局部变量]
+像普通局部变量那样为它分配栈槽、写入初值同样正确（语言保证常量不会再被赋值），
+本部分后面的样例汇编就是这么处理的。两种做法任选一种，在报告里说明即可。
 :::
-
-```asm
-    .globl array
-array:
-    .zero 40                     ; 例如 10 个 int：10 * 4 = 40 字节
-```
 
 ### 5.2 大型立即数（常量池）
 
-RISC-V 的立即数指令 `lui` + `addi` 配合最多能表示 32 位有符号立即数。因此 `-2048 ~ 2047` 范围内的常数可以用 `li` 伪指令直接编码，无需常量池；超出范围才需要放进**常量池**（`.rodata` 段）：
+`li` 伪指令能用 `lui` + `addiw` 拼出任意 32 位立即数，所以 `int` 常量一般都能直接装进寄存器；
+只有超出这个范围（例如 64 位常量），或者同一个大常量被多处复用时，才有必要放进常量池（`.rodata` 段）：
 
 ```llvm
-@big_const = constant i32 0x12345678
-%val = load i32, ptr @big_const
+%big = mul i64 %a, 305419896305419896
 ```
 
 ```asm
     .section .rodata
 big_const:
-    .word 0x12345678
+    .dword 305419896305419896
 
     .text
     la    t0, big_const
-    lw    t1, 0(t0)              ; t1 = 0x12345678
+    ld    t1, 0(t0)              ; t1 = 大常量
 ```
+
+常量池是后端自己生成的只读数据，与源语言有没有全局变量无关。
 
 ### 5.3 字符串常量（超出基础 ToyC 文法）
 
 :::note
-基础 ToyC 文法**不含字符串字面量**，运行时库也只提供 `getint` / `putint`。本小节仅在你自行扩展语言特性、需要输出字符串时参考。
+基础 ToyC 文法不含字符串字面量，运行时库也只提供 `getint` / `putint`。本小节仅在你自行扩展语言特性、需要输出字符串时参考。
 :::
 
 ```llvm
@@ -517,9 +515,326 @@ big_const:
     .asciz "Hello"
 ```
 
-## 六、错误处理与退出码
+### 5.4 如果自行扩展了全局变量
 
-基线后端在遇到错误时必须**优雅退出，不允许崩溃**：
+ToyC 的程序只由函数组成，没有全局变量，所以基线后端的汇编里只有 `.text` 段。
+如果你在后续实验中扩展了全局变量（例如对齐 SysY），才需要在 `.data` 段生成存储单元：
+
+```asm
+    .data
+    .globl global_var
+global_var:
+    .word 0
+```
+
+数组等类型再按元素个数预留空间：
+
+```asm
+    .globl array
+array:
+    .zero 40                     ; 例如 10 个 int：10 * 4 = 40 字节
+```
+
+## 六、输入输出规范与统一样例
+
+### 输入形式
+
+- 输入为 ToyC 源代码，从标准输入流读入：
+
+  ```bash
+  echo "int main() { return 1; }" | ./compiler --dump-asm > test.s
+  ```
+
+- 本地调试时用文件重定向：
+
+  ```bash
+  ./compiler --dump-asm < test.c > test.s
+  ```
+
+### 输出形式
+
+- 把源文件的 RISC-V64GC 汇编写到标准输出流，不做其它处理（本地调试时用重定向写入文件，例如 `./compiler --dump-asm < test.c > test.s`）：
+
+  ```text
+  <RISC-V64GC assembly lines...>
+  ```
+
+- 评测用例保证没有词法、语法、语义错误，所以 `--dump-asm` 正常路径上只输出汇编，不需要处理报错路径；
+- 命令行可以带一个可选参数 `-opt`：
+  - 不带 `-opt`：以功能正确为主，不要求实现优化；
+  - 带 `-opt`：可以启用若干基础优化（常量折叠、简单的局部死代码消除、表达式化简等），也可以直接忽略该参数。
+    是否实现优化不影响正确性判定，但你可以在实验报告里说明实现了哪些优化。
+- 本地调试时把输出重定向到文件，再链接、运行：
+
+  ```bash
+  ./compiler --dump-asm < test.c > test.s
+  riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
+    -nostdlib -static test.s third_party/toyc/libtoyc.a -o test
+  ./test < test.in > test.out
+  ```
+
+### 样例输入
+
+与词法分析、语法分析共用同一个样例程序：
+
+```c
+// ToyC 综合示例：覆盖文法中的全部成分
+/* ToyC 不支持全局变量，所有定义都写在函数里 */
+
+int sum(int n, int from) {
+    int s = 0;
+    while (from <= n) {
+        if (from == 2) {
+            from = from + 1;
+            continue;
+        }
+        s = s + from;
+        from = from + 1;
+    }
+    return s;
+}
+
+void show(int v) {
+    putint(v);
+    ;
+}
+
+int main() {
+    const int LIMIT = 3, STEP = 1;
+    int a = 5, b;
+    b = +a - -1;
+    int c = (a + b) * 2 / 3 % 4;
+    {
+        int a = 1;
+        c = c + a;
+    }
+    if (a >= b && b != 0 || !(a == LIMIT)) {
+        c = c + sum(a, STEP);
+    } else {
+        c = c - 1;
+    }
+    while (c > 0) {
+        c = c - 1;
+        if (c == 5) continue;
+        if (c < 2) break;
+        show(c);
+    }
+    return c;
+}
+```
+
+### 样例输出
+
+汇编的具体写法由你自己决定：用哪些寄存器、栈帧开多大、标号怎么起名都可以不同，
+只要能通过 `riscv64-unknown-elf-gcc` 汇编链接、运行结果与源程序语义一致即可。
+下面给出一份基线输出（不做优化，中间结果用 `t0`/`t1` 传递，每个局部变量占一个栈槽、用 `s0` 作帧指针访问），
+可以直接对照第 2、4 节的算法阅读：
+
+```asm
+.text
+
+.globl sum
+sum:
+        addi  sp, sp, -48
+        sd    ra, 24(sp)
+        sd    s0, 32(sp)
+        add   s0, sp, zero
+        sw    a0, 0(s0)
+        sw    a1, 8(s0)
+        li    t0, 0
+        sw    t0, 16(s0)
+.L0:
+        lw    t0, 8(s0)
+        lw    t1, 0(s0)
+        sgt   t0, t0, t1
+        xori  t0, t0, 1
+        beq   t0, zero, .L2
+        lw    t0, 8(s0)
+        li    t1, 2
+        xor   t0, t0, t1
+        seqz  t0, t0
+        beq   t0, zero, .L1
+        lw    t0, 8(s0)
+        li    t1, 1
+        addw  t0, t0, t1
+        sw    t0, 8(s0)
+        j     .L0
+.L1:
+        lw    t0, 16(s0)
+        lw    t1, 8(s0)
+        addw  t0, t0, t1
+        sw    t0, 16(s0)
+        lw    t0, 8(s0)
+        li    t1, 1
+        addw  t0, t0, t1
+        sw    t0, 8(s0)
+        j     .L0
+.L2:
+        lw    t0, 16(s0)
+        mv    a0, t0
+        j     sum_epilogue
+sum_epilogue:
+        ld    ra, 24(sp)
+        ld    s0, 32(sp)
+        addi  sp, sp, 48
+        ret
+
+.text
+
+.globl show
+show:
+        addi  sp, sp, -32
+        sd    ra, 8(sp)
+        sd    s0, 16(sp)
+        add   s0, sp, zero
+        sw    a0, 0(s0)
+        lw    a0, 0(s0)
+        call  putint
+show_epilogue:
+        ld    ra, 8(sp)
+        ld    s0, 16(sp)
+        addi  sp, sp, 32
+        ret
+
+.text
+
+.globl main
+main:
+        addi  sp, sp, -80
+        sd    ra, 48(sp)
+        sd    s0, 56(sp)
+        add   s0, sp, zero
+        li    t0, 3
+        sw    t0, 0(s0)
+        li    t0, 1
+        sw    t0, 8(s0)
+        li    t0, 5
+        sw    t0, 16(s0)
+        lw    t0, 16(s0)
+        li    t1, 1
+        negw  t1, t1
+        subw  t0, t0, t1
+        sw    t0, 24(s0)
+        lw    t0, 16(s0)
+        lw    t1, 24(s0)
+        addw  t0, t0, t1
+        li    t1, 2
+        mulw  t0, t0, t1
+        li    t1, 3
+        divw  t0, t0, t1
+        li    t1, 4
+        remw  t0, t0, t1
+        sw    t0, 32(s0)
+        li    t0, 1
+        sw    t0, 40(s0)
+        lw    t0, 32(s0)
+        lw    t1, 40(s0)
+        addw  t0, t0, t1
+        sw    t0, 32(s0)
+        lw    t0, 16(s0)
+        lw    t1, 24(s0)
+        slt   t0, t0, t1
+        xori  t0, t0, 1
+        beq   t0, zero, .L3
+        lw    t0, 24(s0)
+        li    t1, 0
+        xor   t0, t0, t1
+        snez  t0, t0
+        beq   t0, zero, .L3
+        li    t0, 1
+        j     .L4
+.L3:
+        li    t0, 0
+.L4:
+        bne   t0, zero, .L5
+        lw    t0, 16(s0)
+        lw    t1, 0(s0)
+        xor   t0, t0, t1
+        seqz  t0, t0
+        seqz  t0, t0
+        bne   t0, zero, .L5
+        li    t0, 0
+        j     .L6
+.L5:
+        li    t0, 1
+.L6:
+        beq   t0, zero, .L7
+        lw    t0, 32(s0)
+        sw    t0, 64(s0)
+        lw    a0, 16(s0)
+        lw    a1, 8(s0)
+        call  sum
+        mv    t0, a0
+        mv    t1, t0
+        lw    t0, 64(s0)
+        addw  t0, t0, t1
+        sw    t0, 32(s0)
+        j     .L8
+.L7:
+        lw    t0, 32(s0)
+        li    t1, 1
+        subw  t0, t0, t1
+        sw    t0, 32(s0)
+.L8:
+.L9:
+        lw    t0, 32(s0)
+        li    t1, 0
+        sgt   t0, t0, t1
+        beq   t0, zero, .L12
+        lw    t0, 32(s0)
+        li    t1, 1
+        subw  t0, t0, t1
+        sw    t0, 32(s0)
+        lw    t0, 32(s0)
+        li    t1, 5
+        xor   t0, t0, t1
+        seqz  t0, t0
+        beq   t0, zero, .L10
+        j     .L9
+.L10:
+        lw    t0, 32(s0)
+        li    t1, 2
+        slt   t0, t0, t1
+        beq   t0, zero, .L11
+        j     .L12
+.L11:
+        lw    a0, 32(s0)
+        call  show
+        j     .L9
+.L12:
+        lw    t0, 32(s0)
+        mv    a0, t0
+        j     main_epilogue
+main_epilogue:
+        ld    ra, 48(sp)
+        ld    s0, 56(sp)
+        addi  sp, sp, 80
+        ret
+```
+
+对照阅读要点：
+
+- 每个函数都是 `.text` + `.globl <函数名>` + `<函数名>:`，紧跟 4.3 节的序言：`addi sp, sp, -<帧大小>` 开栈帧，`sd ra` / `sd s0` 保存返回地址与旧帧指针，`add s0, sp, zero` 把 `s0` 指向栈顶；
+- 局部变量按 4.2 节的顺序分配栈槽（`LIMIT` 在 `0(s0)`、`STEP` 在 `8(s0)`、`a` 在 `16(s0)`……），读写都是 `lw` / `sw`；
+- 函数末尾是 `<函数名>_epilogue:` 标号 + 尾声：恢复 `ra`、`s0`，`addi sp, sp, <帧大小>` 关栈帧，最后 `ret`；有返回值的函数先 `mv a0, t0` 再跳尾声；
+- `void` 函数 `show` 没有返回值，末尾直接落进尾声；其中 `call putint` 是 3.3 节说的库函数外部调用；
+- 控制流用 `beq` / `bne` / `j` + 标号实现，循环回边跳到循环头，`break` / `continue` 分别跳到出口和循环头。
+
+再单独看一条赋值语句，理解"表达式求值 → 存回变量"的过程。源程序 `b = +a - -1;` 生成 5 条指令：
+
+```asm
+        lw    t0, 16(s0)     ; t0 = a
+        li    t1, 1
+        negw  t1, t1         ; t1 = -1（一元负号）
+        subw  t0, t0, t1     ; t0 = a - (-1)（一元正号不产生指令）
+        sw    t0, 24(s0)     ; b = t0
+```
+
+`+a` 是恒等运算，直接取 `a` 的值；`-1` 先装立即数再取负；`a >= b && b != 0 || !(a == LIMIT)` 这类短路表达式则用 `beq`/`bne` 跳过不求值的分支。
+
+## 七、错误处理与退出码
+
+基线后端在遇到错误时必须给出明确的错误信息并正常退出，不允许崩溃：
 
 | 错误类型 | 处理方式 |
 | --- | --- |
@@ -528,7 +843,7 @@ big_const:
 | 引用未声明变量 | 向 stderr 输出 `error: undefined variable: <name>`，退出码 1 |
 | 除零 | 由 RISC-V 硬件 trap 或运行时库处理 |
 
-## 七、命令行与提交物
+## 八、命令行与提交物
 
 ```bash
 cmake -S . -B build

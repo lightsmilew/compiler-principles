@@ -1,5 +1,5 @@
 ---
-sidebar_position: 2
+sidebar_position: 3
 sidebar_label: 死代码消除
 title: 死代码消除（DCE）
 description: 删除结果未被使用且无副作用的指令，包括基于活跃分析和基于 Use-Def 链两种策略

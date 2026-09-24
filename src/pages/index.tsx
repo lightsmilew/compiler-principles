@@ -107,21 +107,23 @@ function QuickStart() {
           <pre className={styles.code}>
             <code>
               <span className={styles.codeComment}>{'# '}</span>
-              <span className={styles.codePrompt}>编译 ToyC</span>
-              {'\n'}cmake -B build &amp;&amp; cmake --build build
+              <span className={styles.codePrompt}>编译 ToyC 编译器</span>
+              {'\ncmake -B build && cmake --build build'}
               {'\n\n'}
               <span className={styles.codeComment}>{'# '}</span>
-              <span className={styles.codePrompt}>分阶段输出</span>
-              {'\n'}./compiler --dump-tokens input.c
-              {'\n'}./compiler --dump-ast input.c
-              {'\n'}./compiler --dump-ir input.c
-              {'\n'}./compiler --dump-asm input.c
+              <span className={styles.codePrompt}>分阶段输出（从 stdin 读源程序，结果写到 stdout）</span>
+              {'\n./compiler --dump-tokens < input.c > input.token'}
+              {'\n./compiler --check-ast   < input.c > input.check-ast'}
+              {'\n./compiler --dump-ir     < input.c > input.ll'}
+              {'\n./compiler --dump-asm    < input.c > input.s'}
               {'\n\n'}
               <span className={styles.codeComment}>{'# '}</span>
-              <span className={styles.codePrompt}>运行生成的汇编</span>
-              {'\n'}riscv64-unknown-elf-gcc -march=rv64gc \
-              {'\n'}  -static out.s libtoyc.a -o out.elf
-              {'\n'}qemu-riscv64 out.elf
+              <span className={styles.codePrompt}>链接并运行生成的汇编</span>
+              {'\nriscv64-unknown-elf-gcc \\'}
+              {'\n    -march=rv64gc -mabi=lp64d \\'}
+              {'\n    -nostdlib -static input.s \\'}
+              {'\n    third_party/toyc/libtoyc.a -o input'}
+              {'\nqemu-riscv64 input < input.in > result.out'}
             </code>
           </pre>
         </div>

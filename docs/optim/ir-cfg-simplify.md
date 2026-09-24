@@ -1,5 +1,5 @@
 ---
-sidebar_position: 5
+sidebar_position: 6
 sidebar_label: 控制流简化
 title: 控制流简化（CFG Simplification）
 description: 删除不可达基本块、折叠恒真假分支、把多分支合并为直接跳转
@@ -34,13 +34,15 @@ L1: br label %L2     ; "跳到跳转"
 ```
 
 ```mermaid
+%% 上下两块对比：Mermaid 会把后写的子图放在上方，所以先写「化简后」，
+%% 渲染出来才是上=化简前、下=化简后。
 flowchart LR
+  subgraph 化简后
+    A2[A] -- br L2 --> C2[L2]
+  end
   subgraph 化简前
     A1[A] -- br L1 --> B1[L1]
     B1 -- br L2 --> C1[L2]
-  end
-  subgraph 化简后
-    A2[A] -- br L2 --> C2[L2]
   end
 ```
 
@@ -87,12 +89,13 @@ B:
 `A` 的唯一后继是 `B`，且 `B` 没有其它前驱。可以把 `B` 的指令合并到 `A` 末尾，删除 `B` 本身。前提是 `B` 的 phi 节点只来自 `A`，否则合并会丢失信息。
 
 ```mermaid
+%% 同上：先写「合并后」，渲染出来才是上=合并前、下=合并后。
 flowchart LR
-  subgraph 合并前
-    A1[A] -- br --> B1[B: phi + ret]
-  end
   subgraph 合并后
     A2[A: phi + ret]
+  end
+  subgraph 合并前
+    A1[A] -- br --> B1[B: phi + ret]
   end
 ```
 
@@ -108,7 +111,7 @@ br i1 %c, label %T, label %F
 ## 五、执行顺序与迭代
 
 ```mermaid
-flowchart LR
+flowchart TB
   A[简化终结指令] --> B[块合并]
   B --> C[删除不可达块]
   C --> D[phi 节点退化]
