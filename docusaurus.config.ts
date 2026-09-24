@@ -81,7 +81,11 @@ const config: Config = {
       theme: {light: 'neutral', dark: 'dark'},
       options: {
         fontFamily: 'var(--ifm-font-family-base)',
-        flowchart: {curve: 'basis', useMaxWidth: true, htmlLabels: true},
+        // Preserve readable text at the diagram's natural size. The shared
+        // container scrolls horizontally when a diagram exceeds the page width.
+        flowchart: {curve: 'basis', useMaxWidth: false, htmlLabels: true},
+        sequence: {useMaxWidth: false},
+        pie: {useMaxWidth: false},
         themeVariables: {
           // 珞珈绿主题（与全站品牌色保持一致）
           primaryColor: '#0e4834',

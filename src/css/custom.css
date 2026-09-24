@@ -559,33 +559,44 @@ div[class^='codeBlockContainer'] {
 }
 
 /* --------------------------------------------------------------------------
-   7. Mermaid 图表容器 —— 修复底部被遮盖问题
+   7. Mermaid 图表容器 —— 原始尺寸显示，宽图局部滚动
    --------------------------------------------------------------------------
-   原容器使用 padding + overflow-x: auto，但 Mermaid svg 的 max-width:100%
-   会让 svg 高度按比例压缩（横向缩放时纵向被截断）；同时外层没有
-   `overflow: visible`，长文本节点的下半部分会被裁掉。
+   配合 useMaxWidth: false 保留图表的实际宽高，避免复杂图表缩小到文字
+   无法阅读。使用普通块布局和自动外边距居中，避免 flex 居中导致宽图
+   左侧溢出到滚动区域之外。不要强制覆盖 SVG 的高度或宽高比。
    --------------------------------------------------------------------------
 */
 .docusaurus-mermaid-container {
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
+  display: block;
+  min-width: 0;
+  max-width: 100%;
   margin: 1.5rem 0;
   padding: 1.5rem;
   background-color: var(--cc-bg-surface);
   border: 1px solid var(--cc-border);
   border-radius: var(--cc-radius-xl);
   box-shadow: var(--cc-shadow-sm);
-  /* 长图横向可能溢出（实验路线一长串节点），允许容器横向滚动；
-     但不让高度被截断——设 min-height 由内容决定 */
-  overflow-x: auto;
-  overflow-y: visible;
+  overflow: auto;
 }
 
-.docusaurus-mermaid-container svg {
-  max-width: 100%;
-  height: auto !important;     /* 关键：让 svg 按内容自适应高度，不被强制裁切 */
+.docusaurus-mermaid-container > svg {
+  /* Override the theme's responsive SVG rule, including per-diagram styles. */
+  max-width: none !important;
   display: block;
+  margin-inline: auto;
+}
+
+@media (max-width: 600px) {
+  .docusaurus-mermaid-container {
+    padding: 1rem;
+  }
+}
+
+@media print {
+  .docusaurus-mermaid-container > svg {
+    max-width: 100% !important;
+    height: auto;
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -827,7 +838,9 @@ hr {
   overflow: visible;
 }
 
-.docusaurus-mermaid-container p {
+.docusaurus-mermaid-container .nodeLabel p,
+.docusaurus-mermaid-container .edgeLabel p,
+.docusaurus-mermaid-container .label p {
   margin: 0;
   padding: 0;
   line-height: 1.5;
