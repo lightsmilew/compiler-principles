@@ -308,12 +308,12 @@ int f(int x) {
 
 ```bash
 # 1. 检查优化后的汇编是否还残留除法
-./compiler --dump-asm -opt < test.c > after.s
+./compiler -asm -opt < test.c > after.s
 grep -nE '\b(div|divw|rem|remw)\b' after.s     # 除数全是常量时应当没有输出
 
 # 2. 对拍：优化前后分别链接运行，比较输出
-./compiler --dump-asm      < test.c > base.s
-./compiler --dump-asm -opt < test.c > opt.s
+./compiler -asm      < test.c > base.s
+./compiler -asm -opt < test.c > opt.s
 ```
 
 建议对有符号和无符号范围分别取样，包含 `0`、`±1`、`INT_MIN`、`INT_MAX`、`UINT_MAX`，以及除数倍数附近的值，逐个比较原商、余数与优化结果。抽样能发现实现错误，不能替代公式证明；表中参数应由公式计算，勿把抽样称为全范围验证。

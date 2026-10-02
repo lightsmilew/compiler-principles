@@ -222,8 +222,8 @@ flowchart TB
 
 ```bash
 # 内联与其它优化之后的 IR / 汇编
-./compiler --dump-ir  --opt < test.c > after.ll
-./compiler --dump-asm -opt < test.c > after.s
+./compiler -ir  -opt < test.c > after.ll
+./compiler -asm -opt < test.c > after.s
 
 # 1. call 条数是否下降（I/O 调用的 call 会保留）
 grep -cE '\bcall\b' after.ll
@@ -232,8 +232,8 @@ grep -cE '\bcall\b' after.ll
 grep -nE '\b(jal|call)\b' after.s
 
 # 3. 功能对拍：优化前后链接运行，输出必须逐字节一致
-./compiler --dump-asm      < test.c > base.s
-./compiler --dump-asm -opt < test.c > opt.s
+./compiler -asm      < test.c > base.s
+./compiler -asm -opt < test.c > opt.s
 ```
 
 内联不改变程序语义，只改变代码的组织形式。正确性用输出对拍验证，收益用汇编指令数与 `call` 条数衡量。

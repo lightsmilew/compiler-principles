@@ -153,8 +153,8 @@ ToyC 实现图着色的最低要求：
 
 ```bash
 # 同一份输入，比较线性扫描 vs 图着色的代码质量
-./compiler --dump-asm -regalloc=linear < input.c > input.linear.s
-./compiler --dump-asm -regalloc=graph  < input.c > input.graph.s
+./compiler -asm -regalloc=linear < input.c > input.linear.s
+./compiler -asm -regalloc=graph  < input.c > input.graph.s
 
 # 比较：
 # 1. lw/sw 数量（spill 越少越好）

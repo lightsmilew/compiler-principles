@@ -233,13 +233,13 @@ Token {
 - 输入为 ToyC 源代码，从标准输入流读入：
 
   ```bash
-  echo "int a = 1;" | ./compiler --dump-tokens > test.token
+  echo "int a = 1;" | ./compiler -token > test.token
   ```
 
 - 本地调试时用文件重定向：
 
   ```bash
-  ./compiler --dump-tokens < test.c > test.token
+  ./compiler -token < test.c > test.token
   ```
 
 :::tip[内部名字与输出名字的对应]
@@ -257,7 +257,7 @@ Token {
 
 ### 输出形式
 
-每行一个 Token，写到标准输出流；本地调试时用重定向写入文件（例如 `./compiler --dump-tokens < test.c > test.token`），格式为 `<序号>:<类型>:<内容>`：
+每行一个 Token，写到标准输出流；本地调试时用重定向写入文件（例如 `./compiler -token < test.c > test.token`），格式为 `<序号>:<类型>:<内容>`：
 
 ```text
 0:'int':"int"
@@ -556,7 +556,7 @@ int main() {
 ```bash
 cmake -S . -B build
 cmake --build build
-./compiler --dump-tokens < input.c > input.token
+./compiler -token < input.c > input.token
 ```
 
 ```text

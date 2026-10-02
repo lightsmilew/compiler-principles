@@ -73,7 +73,7 @@ const stages: Stage[] = [
   {
     index: '★',
     title: '综合课程设计',
-    description: '形成完整编译器，现场答辩，接受随机提问。',
+    description: '形成完整编译器，统一提交报告并完成汇报展示。',
     input: 'ToyC源文件',
     output: '可执行文件',
     to: '/docs/labs/capstone',

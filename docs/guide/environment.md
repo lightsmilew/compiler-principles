@@ -615,7 +615,7 @@ riscv64-linux-gnu-gcc -march=rv64gc -mabi=lp64d \
 
 ## 三、目录约定
 
-仓库采用单根布局：所有实验共享同一个编译器源码和构建脚本，评测机通过调用不同命令行接口（`--dump-tokens` / `--check-ast` / `--dump-asm` 等）区分实验阶段。
+仓库采用单根布局：所有实验共享同一个编译器源码和构建脚本，评测机通过调用不同命令行接口（`-token` / `-ast` / `-asm` 等）区分实验阶段。
 
 ```text
 toyc-cpp/                    # 仓库目录名由你决定，此处以 toyc-cpp 为例
@@ -641,7 +641,7 @@ toyc-cpp/                    # 仓库目录名由你决定，此处以 toyc-cpp 
 ## 附：参考文档下载
 
 
-以下文档可在本地离线阅读，也可通过下方链接重新下载：
+全部课程附件见[资源下载](../reference/downloads)。以下文档可在本地离线阅读，也可通过下方链接重新下载：
 
 - [下载 QEMU 本地调试指南](pathname:///pdf/QEMU本地调试指南.pdf) — 在 QEMU 中单步调试编译器生成的 RISC-V 汇编
 - [下载 SysY2022 语言定义](pathname:///pdf/SysY2022语言定义-V1.pdf) — 编译系统赛的官方语言规范（基本数据类型、语句、函数等）
@@ -680,7 +680,7 @@ EOF
 
 # 2. 用统一驱动处理它（实验一之后应能输出 Token 流）
 #    可执行文件统一叫 compiler，仓库目录名由你自取
-./compiler --dump-tokens < hello.c > hello.token
+./compiler -token < hello.c > hello.token
 ```
 
 如果能正常输出 Token 流而程序不崩溃，环境即准备完成。

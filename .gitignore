@@ -119,3 +119,5 @@ $RECYCLE.BIN/
 *.orig
 *.rej
 /tmp/
+*codex*/
+*output*/

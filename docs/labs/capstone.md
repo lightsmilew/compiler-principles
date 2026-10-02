@@ -36,12 +36,13 @@ flowchart TB
 
 | 序号 | 实验部分 | 核心产出 | 建议课时 |
 | --- | --- | --- | --- |
-| 一 | 词法分析 | Token 流 | 4 |
-| 二 | 语法分析 | AST 与分析器 | 8 |
-| 三 | 中间代码生成 | IR 设计与转换方案 | 6 |
-| 四 | 目标代码生成 | 基线 RISC-V64GC 汇编 | 6 |
-| 五 | 中间代码优化 | 优化后的 IR | 6 |
-| 六 | 目标代码优化 | 优化后的 RISC-V 汇编 | 6 |
+| 一 | 词法分析 | Token 流 | 8 |
+| 二 | 语法分析 | AST 与分析器 | 12 |
+| 三 | 中间代码生成 | IR 设计与转换方案 | 10 |
+| 四 | 目标代码生成 | 基线 RISC-V64GC 汇编 | 12 |
+| 五 | 中间代码优化 | 优化后的 IR | 9 |
+| 六 | 目标代码优化 | 优化后的 RISC-V 汇编 | 9 |
+|  | **合计** |  | **60** |
 
 ### 如何开始
 
@@ -64,7 +65,7 @@ flowchart TB
 | 实验报告与设计说明 | 20% | LLVM IR/SSA、代码生成、优化、寄存器分配、测试与小组分工。 |
 
 评测部分内部按功能 `85%`、性能 `15%` 计算，最终成绩为"评测得分 `80%` + 报告得分 `20%`。
-`-opt` 或 `--dump-ir --opt` 可以启用优化；未启用优化时必须保证功能正确，是否实现优化不影响基础正确性判定。
+性能样例评测时，平台会传入 `-opt` 参数。编译器应在该参数下启用已实现的优化；如果暂未实现优化，也必须静默接受该参数并继续输出正常汇编，不要向标准输出写入额外提示。未启用优化时必须保证功能正确，是否实现优化不影响基础正确性判定。
 
 ```mermaid
 pie showData
@@ -124,7 +125,7 @@ ToyC 源文件统一使用 `.c` 后缀（与 C 语言一致，便于工具链识
 **示例**：
 
 ```bash
-./compiler --dump-asm < input.c > input.s
+./compiler -asm < input.c > input.s
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
   -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
 ./input < input.in > result.out        # result.out 是 ToyC 程序的 stdout，与 input.out 对比
@@ -167,13 +168,13 @@ riscv64-linux-gnu-gcc -march=rv64gc -mabi=lp64d \
 示例（第一部分，词法）：
 
 ```bash
-./compiler --dump-tokens < input.c > input.token
+./compiler -token < input.c > input.token
 ```
 
 示例（第四部分，汇编链接与运行）：
 
 ```bash
-./compiler --dump-asm < input.c > input.s
+./compiler -asm < input.c > input.s
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
   -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
 ./input < input.in > result.out        # result.out 是 ToyC 程序 stdout，与 input.out 对比
@@ -191,30 +192,29 @@ riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
 ./compiler [选项] < input.c
 
 选项：
-  --dump-tokens    输出词法单元流：每行一个 Token，格式 <序号>:<类型>:<内容>
-  --check-ast      语法检查：无语法错误输出 accept，有错误输出 reject 与出错行号
-  --dump-ir        [自调试] 输出 LLVM IR
-  --dump-ir --opt  [自调试] 输出优化后的 LLVM IR
-  --dump-asm       输出 RV64GC 目标汇编代码
-  -opt             启用基础优化
+  -token    输出词法单元流：每行一个 Token，格式 <序号>:<类型>:<内容>
+  -ast      语法检查：无语法错误输出 accept，有错误输出 reject 与出错行号
+  -ir        [自调试] 输出 LLVM IR
+  -ir -opt  [自调试] 输出优化后的 LLVM IR
+  -asm       输出 RV64GC 目标汇编代码
+  -opt            启用基础优化
 ```
 
 :::info[输入输出一律走标准流]
-编译器只从 stdin 读源程序、只往 stdout 写阶段结果，不要再支持“用命令行参数指定输入输出文件名”这类接口，
-也不要直接打开 `input.c`、`output.s` 之类的固定文件名。这样评测脚本才能用重定向统一驱动：
+编译器只从 stdin 读源程序、只往 stdout 写阶段结果，不要直接打开 `input.c`、`output.s` 之类的固定文件名。这样评测脚本才能用重定向统一驱动：
 
 ```bash
-./compiler --dump-tokens < input.c > input.token
-./compiler --dump-asm    < input.c > input.s
+./compiler -token < input.c > input.token
+./compiler -asm    < input.c > input.s
 ```
 :::
 
 :::tip[关于统一接口]
-自动评测目前只有三个检查点，分别对应 `--dump-tokens`、`--check-ast`、`--dump-asm` 三个开关（`-opt` 是可选的附加开关）。
+自动评测目前有三个阶段检查点，分别对应 `-token`、`-ast`、`-asm`；性能样例会额外传入 `-opt`。该参数是可选的附加开关，但编译器必须能够接受它并保持标准输出格式不变。
 这几个参数名称必须逐字符一致，否则对应部分记为 0 分。
 三者的输入输出规范与统一样例，分别见[第一部分](./part1-lexer)、[第二部分](./part2-parser)、[第四部分](./part4-codegen)的“输入输出规范与统一样例”一节。
 
-`--dump-ir` 与 `--dump-ir --opt` 属于自调试可选接口，方便你在本地观察中间结果，测评脚本不会调用，无需严格对齐名称。
+`-ir` 与 `-ir -opt` 属于自调试可选接口，方便你在本地观察中间结果，测评脚本不会调用，无需严格对齐名称。
 :::
 
 ## 七、验收流程

@@ -75,7 +75,7 @@ export default function Home(): ReactNode {
                   <Link className={styles.primaryButton} to="/docs/labs/part1-lexer">开始实验 <Arrow /></Link>
                   <Link className={styles.secondaryButton} to="/docs/labs/capstone">查看课程地图 <Arrow diagonal /></Link>
                 </div>
-                <div className={styles.heroMeta}><span><strong>06</strong> 个递进实验</span><span><strong>01</strong> 套完整编译器</span><span>阶段产物可独立验证</span></div>
+                <div className={styles.heroMeta}><span><strong>06</strong> 个递进实验</span><span><strong>60</strong> 课时课程安排</span><span>阶段产物可独立验证</span></div>
               </div>
               <CompilerPreview />
             </div>

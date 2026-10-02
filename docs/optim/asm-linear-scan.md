@@ -177,8 +177,8 @@ public:
 ## 七、测试
 
 ```bash
-./compiler --dump-asm        < input.c > input.s       # 不优化
-./compiler --dump-asm -opt   < input.c > input.opt.s   # 含寄存器分配
+./compiler -asm        < input.c > input.s       # 不优化
+./compiler -asm -opt   < input.c > input.opt.s   # 含寄存器分配
 diff input.s input.opt.s                               # 观察寄存器替换与 spill
 
 # 统计寄存器使用

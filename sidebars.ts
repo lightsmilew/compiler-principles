@@ -77,7 +77,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: '参考资料',
-      items: ['reference/grammar', 'reference/llvm-mlir', 'reference/toyc-runtime', 'reference/faq'],
+      items: ['reference/grammar', 'reference/llvm-mlir', 'reference/toyc-runtime', 'reference/downloads', 'reference/faq'],
     },
   ],
 };

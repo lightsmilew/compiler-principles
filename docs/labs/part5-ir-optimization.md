@@ -341,10 +341,10 @@ flowchart TB
 ```bash
 cmake -S . -B build
 cmake --build build
-./compiler --dump-ir < input.c > input.ll
-./compiler --dump-ir --opt < input.c > input.opt.ll
-./compiler --dump-asm < input.c > input.s
-./compiler --dump-asm -opt < input.c > input.opt.s
+./compiler -ir < input.c > input.ll
+./compiler -ir -opt < input.c > input.opt.ll
+./compiler -asm < input.c > input.s
+./compiler -asm -opt < input.c > input.opt.s
 ```
 
 分别链接并运行两个版本，比较输出和退出码；同时报告 IR 指令数、基本块数和优化前后差异。

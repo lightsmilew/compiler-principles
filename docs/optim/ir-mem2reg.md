@@ -362,8 +362,8 @@ flowchart TB
 
 ```bash
 # 分别打印优化前后的 IR
-./compiler --dump-ir        < test.c > before.ll
-./compiler --dump-ir --opt  < test.c > after.ll
+./compiler -ir        < test.c > before.ll
+./compiler -ir -opt  < test.c > after.ll
 
 # 关注三个指标：alloca 条数、load/store 条数、phi 条数
 grep -c 'alloca'  before.ll   after.ll

@@ -94,12 +94,14 @@ flowchart TB
 
 ```mermaid
 %% 每个值版本使用独立节点，避免把同名寄存器的两段区间误合并。
-flowchart LR
+flowchart TB
   subgraph 冲突图
+    direction TB
     A[t0₀] --- B[t1]
     B --- C[t0₁]
   end
   subgraph 活跃区间
+    direction TB
     R0["t0₀：0 到 2"] ~~~ R1["t1：1 到 4"]
     R1 ~~~ R2["t0₁：3 到 5"]
   end
@@ -266,8 +268,8 @@ flowchart TD
 ```bash
 cmake -S . -B build
 cmake --build build
-./compiler --dump-asm < input.c > input.s
-./compiler --dump-asm -opt < input.c > input.opt.s
+./compiler -asm < input.c > input.s
+./compiler -asm -opt < input.c > input.opt.s
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
   -nostdlib -static input.opt.s third_party/toyc/libtoyc.a -o input
 ./input < input.in > result.out

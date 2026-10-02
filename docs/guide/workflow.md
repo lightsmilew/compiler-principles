@@ -88,19 +88,19 @@ static final int MAX_LEN = 64;  // 常量 UPPER_SNAKE_CASE
 
 ### 可测试性
 
-统一驱动使用原实验约定的 `--dump-*` 开关，从标准输入读取 ToyC 源程序、向标准输出写入阶段结果，测试时用重定向保存到文件：
+统一驱动使用 `-token`、`-ast`、`-ir`、`-asm` 选项，从标准输入读取 ToyC 源程序、向标准输出写入阶段结果，测试时用重定向保存到文件：
 
 ```bash
-./compiler --dump-tokens   < input.c > input.token      # 第一部分：Token 流
-./compiler --check-ast     < input.c > input.check-ast  # 第二部分：语法检查，输出 accept / reject
-./compiler --dump-ir       < input.c > input.ll         # 第三部分：LLVM IR
-./compiler --dump-ir --opt < input.c > input.opt.ll     # 第三部分：优化后 LLVM IR
-./compiler --dump-asm      < input.c > input.s          # 第四部分：基线汇编
-./compiler --dump-asm -opt < input.c > input.opt.s      # 第五、六部分：优化汇编
+./compiler -token   < input.c > input.token      # 第一部分：Token 流
+./compiler -ast     < input.c > input.check-ast  # 第二部分：语法检查，输出 accept / reject
+./compiler -ir       < input.c > input.ll         # 第三部分：LLVM IR
+./compiler -ir -opt < input.c > input.opt.ll     # 第三部分：优化后 LLVM IR
+./compiler -asm      < input.c > input.s          # 第四部分：基线汇编
+./compiler -asm -opt < input.c > input.opt.s     # 第五、六部分：优化汇编
 
 ```
 
-`--dump-*` 模式用于检查中间结果；最终评测重点是 `--dump-asm` 产生的 RV64GC 汇编及其运行结果。
+这些阶段选项用于检查中间结果；最终评测重点是 `-asm` 产生的 RV64GC 汇编及其运行结果。
 
 ## 四、验收方式
 

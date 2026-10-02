@@ -386,23 +386,20 @@ declare void @putint(i32)
 
 本节中的“溢出”指**寄存器溢出（spill）**：当活跃值超过可用寄存器数量时，把值写入当前函数的 spill 槽，之后在使用前重新加载。它不是运行时栈空间耗尽；栈帧大小应在代码生成前按局部变量、保存寄存器、溢出值和对齐要求一次计算完成。
 
+```mermaid
+flowchart TB
+  H["高地址：进入函数前的 sp"]
+  R["保存区<br/>ra + 实际使用的 s0–s11"]
+  L["局部变量槽<br/>alloca 与固定局部对象"]
+  S["spill 槽<br/>寄存器溢出的 SSA 值"]
+  P["对齐填充<br/>保证栈帧大小为 16 字节的倍数"]
+  F["低地址：函数体内的 sp"]
+  H -->|addi sp, sp, -frame_size| R --> L --> S --> P --> F
+  C["调用点临时区<br/>第 9 个及以后参数<br/>活跃 caller-saved 值"]
+  C -. "调用前按 ABI 对齐分配，返回后回收" .- F
 ```
-高地址 ──────────────────────── 低地址
-│ 溢出参数区(第9+个参)           │ ← 由调用者分配（调用其他函数时）
-├─────────────────────────────┤ ← sp 入口
-│ 保存的 ra                    │ 8 bytes
-├─────────────────────────────┤
-│ 保存的 s0 (fp)               │ 8 bytes
-├─────────────────────────────┤
-│ 保存的 s1~s11(若使用)         │ 每个 8 bytes
-├─────────────────────────────┤
-│ 局部变量槽(alloca)            │
-├─────────────────────────────┤
-│ 临时寄存器 spill 槽           │ 溢出时
-├─────────────────────────────┤
-│ 对齐填充(保证16字节对齐)       │
-└─────────────────────────────┘ ← 最终 sp
-```
+
+上图只表示当前函数的持久栈帧；调用点临时区按每次 `call` 的需要动态保留，不能与 spill 槽或保存区重叠。所有槽位都由 `FrameLayout` 记录偏移，序言先建立栈帧并保存寄存器，函数体读写局部值和 spill 值，尾声恢复寄存器后再回收整个栈帧。
 
 ### 4.2 栈帧布局算法
 
@@ -572,32 +569,32 @@ array:
 - 输入为 ToyC 源代码，从标准输入流读入：
 
   ```bash
-  echo "int main() { return 1; }" | ./compiler --dump-asm > test.s
+  echo "int main() { return 1; }" | ./compiler -asm > test.s
   ```
 
 - 本地调试时用文件重定向：
 
   ```bash
-  ./compiler --dump-asm < test.c > test.s
+  ./compiler -asm < test.c > test.s
   ```
 
 ### 输出形式
 
-- 把源文件的 RISC-V64GC 汇编写到标准输出流，不做其它处理（本地调试时用重定向写入文件，例如 `./compiler --dump-asm < test.c > test.s`）：
+- 把源文件的 RISC-V64GC 汇编写到标准输出流，不做其它处理（本地调试时用重定向写入文件，例如 `./compiler -asm < test.c > test.s`）：
 
   ```text
   <RISC-V64GC assembly lines...>
   ```
 
-- 评测用例保证没有词法、语法、语义错误，所以 `--dump-asm` 正常路径上只输出汇编，不需要处理报错路径；
+- 评测用例保证没有词法、语法、语义错误，所以 `-asm` 正常路径上只输出汇编，不需要处理报错路径；
 - 命令行可以带一个可选参数 `-opt`：
   - 不带 `-opt`：以功能正确为主，不要求实现优化；
-  - 带 `-opt`：可以启用若干基础优化（常量折叠、简单的局部死代码消除、表达式化简等），也可以直接忽略该参数。
+  - 带 `-opt`：可以启用若干基础优化（常量折叠、简单的局部死代码消除、表达式化简等），也可以静默忽略该参数。
     是否实现优化不影响正确性判定，但你可以在实验报告里说明实现了哪些优化。
 - 本地调试时把输出重定向到文件，再链接、运行：
 
   ```bash
-  ./compiler --dump-asm < test.c > test.s
+  ./compiler -asm < test.c > test.s
   riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
     -nostdlib -static test.s third_party/toyc/libtoyc.a -o test
   ./test < test.in > test.out
@@ -871,7 +868,7 @@ main_epilogue:
 ```bash
 cmake -S . -B build
 cmake --build build
-./compiler --dump-asm < input.c > input.s
+./compiler -asm < input.c > input.s
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
   -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
 ./input < input.in > result.out

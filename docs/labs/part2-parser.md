@@ -285,18 +285,18 @@ AST 应丢弃不影响语义的括号和分隔符，但保留源位置，便于�
 - 输入为 ToyC 源代码，从标准输入流读入：
 
   ```bash
-  echo "int a = 1;" | ./compiler --check-ast > test.check-ast
+  echo "int a = 1;" | ./compiler -ast > test.check-ast
   ```
 
 - 本地调试时用文件重定向：
 
   ```bash
-  ./compiler --check-ast < test.c > test.check-ast
+  ./compiler -ast < test.c > test.check-ast
   ```
 
 ### 输出形式
 
-所有输出都写到标准输出流；本地调试时用重定向写入文件，例如 `./compiler --check-ast < test.c > test.check-ast`，文件名建议用 `.check-ast` 后缀，便于与助教脚本对账。
+所有输出都写到标准输出流；本地调试时用重定向写入文件，例如 `./compiler -ast < test.c > test.check-ast`，文件名建议用 `.check-ast` 后缀，便于与助教脚本对账。
 
 源代码没有语法错误时，输出一行：
 
@@ -460,8 +460,8 @@ reject
 ```bash
 cmake -S . -B build
 cmake --build build
-./compiler --check-ast < input.c > input.check-ast
-./compiler --check-ast --parser ll1 < input.c > input.check-ast
+./compiler -ast < input.c > input.check-ast
+./compiler -ast --parser ll1 < input.c > input.check-ast
 ```
 
 报告需包含：文法改写、FIRST/FOLLOW 集、分析表或递归下降实现、AST 节点设计、错误恢复策略和测试结果。测试应覆盖优先级、结合性、嵌套语句、函数调用和非法输入。

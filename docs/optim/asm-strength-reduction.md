@@ -143,8 +143,8 @@ int main() {
 EOF
 
 # 对比无优化 vs 有强度削减的汇编，并检查是否还有残留的乘/除
-./compiler --dump-asm        < loop.c > loop.s
-./compiler --dump-asm -opt   < loop.c > loop.opt.s
+./compiler -asm        < loop.c > loop.s
+./compiler -asm -opt   < loop.c > loop.opt.s
 diff loop.s loop.opt.s
 grep -nE '\b(mul|mulw|div|divw|rem|remw)\b' loop.opt.s
 

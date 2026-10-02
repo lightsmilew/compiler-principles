@@ -242,8 +242,8 @@ AFTER:
 
 ```bash
 # 优化前后的汇编
-./compiler --dump-asm      < test.c > base.s
-./compiler --dump-asm -opt < test.c > opt.s
+./compiler -asm      < test.c > base.s
+./compiler -asm -opt < test.c > opt.s
 
 # 1. 统计无条件跳转条数（应当减少）
 grep -cE '^\s*j\s' base.s opt.s
