@@ -17,11 +17,13 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: '实验指南',
+      collapsible: false,
       items: ['guide/environment', 'guide/workflow', 'guide/report', 'guide/grading', 'guide/submission'],
     },
     {
       type: 'category',
       label: '实验部分',
+      collapsible: false,
       items: [
         'labs/part1-lexer',
         'labs/part2-parser',

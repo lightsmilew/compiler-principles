@@ -36,6 +36,10 @@ flowchart LR
     A1 --> C1[x+1 → %c]
     C1 --> D1[mul %c, 3 → %d]
   end
+  subgraph 重写后
+    A2[x+1 → %a] --> B2[mul %a, 2 → %b]
+    A2 --> D2[mul %a, 3 → %d]
+  end
 ```
 
 ## 二、形式化条件
@@ -48,7 +52,8 @@ CSE 的两个条件：
 这等价于"表达式在支配路径上"且"两次求值之间操作数未被 kill"。
 
 ```text
-available[B] = ∩ available[P] for P in predecessors[B]  ∪  expr(B)
+available_in[B]  = ∩ available_out[P] for P in predecessors[B]
+available_out[B] = gen[B] ∪ (available_in[B] − kill[B])
 ```
 
 ## 三、基于可用表达式分析的 CSE
@@ -59,8 +64,8 @@ available[B] = ∩ available[P] for P in predecessors[B]  ∪  expr(B)
 ```text
 AE_gen[B]  = { expr(I) : I 是块 B 中纯表达式指令 }
 AE_kill[B] = { expr(I') : I' 是块 B 中对操作数有重定义的指令 }
-AE_in[B]   = AE_gen[B] ∪ (AE_out[B] − AE_kill[B])
-AE_out[B]  = ∩ AE_in[P]                       for all P in successors[B]
+AE_in[B]   = ∩ AE_out[P]                      for all P in predecessors[B]
+AE_out[B]  = AE_gen[B] ∪ (AE_in[B] − AE_kill[B])
 ```
 
 不动点算法：
@@ -76,33 +81,37 @@ AE_out[B]  = ∩ AE_in[P]                       for all P in successors[B]
  3:     repeat
  4:         changed = false;
  5:         for each block B in reversePostOrder(func) do
- 6:             new_out = U;                                    // 交集初值取全集 U
- 7:             for each S in B.successors do
- 8:                 new_out = new_out ∩ AE_in[S];               // meet：交集
- 9:             end for
-10:             new_in = AE_gen[B] ∪ (new_out − AE_kill[B]);    // transfer 函数
-11:             if new_in != AE_in[B] or new_out != AE_out[B] then
-12:                 AE_in[B] = new_in;  AE_out[B] = new_out;  changed = true;
-13:             end if
-14:         end for
-15:     until not changed
-16:     for each block B in func do                             // 应用：删除冗余表达式
-17:         for each pure instruction I in B do
-18:             if expr(I) ∈ AE_in[B] then
-19:                 replaceAllUsesWith(I.result, availableExpr(I));  delete(I);
-20:             end if
-21:         end for
-22:     end for
+ 6:             new_in = U;                                     // 前驱交集初值
+ 7:             if B is entry then new_in = ∅; end if
+ 8:             for each P in B.predecessors do
+ 9:                 new_in = new_in ∩ AE_out[P];                // meet：前驱交集
+10:             end for
+11:             new_out = AE_gen[B] ∪ (new_in − AE_kill[B]);    // transfer 函数
+12:             if new_in != AE_in[B] or new_out != AE_out[B] then
+13:                 AE_in[B] = new_in;  AE_out[B] = new_out;  changed = true;
+14:             end if
+15:         end for
+16:     until not changed
+17:     for each block B in func do                             // 应用：删除冗余表达式
+18:         available = AE_in[B]
+19:         for each pure instruction I in B do
+20:             if expr(I) ∈ available then
+21:                 replaceAllUsesWith(I.result, availableExpr(I));  delete(I);
+22:             else
+23:                 available.add(expr(I));
+24:             end if
+25:         end for
+26:     end for
 ```
 
 对每条表达式指令 `I`，若 `expr(I) ∈ AE_in[块 B]`，则说明 `I` 在支配路径上已经求过值——可以删除 `I`，并把后续 use 替换为之前的 SSA 值。
 
 ```mermaid
 flowchart TD
-  Init[初始化 AE_out 为空集] --> Loop{changed?}
+  Init[入口 AE_in 为空集，其余 AE_out 置全集] --> Loop{changed?}
   Loop -- 是 --> Visit[按 RPO 遍历基本块]
-  Visit --> Meet["new_out = 各后继 AE_in 的交集"]
-  Meet --> Trans[new_in = gen ∪ new_out - kill]
+  Visit --> Meet["new_in = 各前驱 AE_out 的交集"]
+  Meet --> Trans["new_out = gen ∪ new_in - kill"]
   Trans --> Update{集合有变化?}
   Update -- 是 --> Flag[changed = true] --> Loop
   Update -- 否 --> Loop

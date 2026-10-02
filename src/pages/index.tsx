@@ -9,8 +9,8 @@ const labs = [
   {title: '语法分析', label: 'SYNTAX ANALYSIS', description: '让 Token 形成结构。依据文法构建抽象语法树，理解程序的组织方式。', from: 'Token', to: 'AST', path: 'part2-parser', category: '编译器前端'},
   {title: '语义分析与 IR 生成', label: 'INTERMEDIATE REPRESENTATION', description: '连接语法与执行。完成语义处理，将抽象语法树翻译为中间表示。', from: 'AST', to: 'LLVM IR', path: 'part3-ir', category: '编译器前端'},
   {title: '目标代码生成', label: 'CODE GENERATION', description: '让程序走向机器。把中间表示转换为可以运行的 RISC-V 64GC 汇编。', from: 'LLVM IR', to: 'RISC-V', path: 'part4-codegen', category: '编译器后端'},
-  {title: 'IR 优化', label: 'IR OPTIMIZATION', description: '在正确的基础上更进一步。探索数据流分析、常量传播与死代码消除。', from: 'LLVM IR', to: 'Optimized IR', path: 'part5-ir-optimization', category: '优化进阶'},
-  {title: '目标代码优化', label: 'TARGET OPTIMIZATION', description: '把性能落实到指令。探索寄存器分配、窥孔优化与指令调度。', from: 'RISC-V', to: 'Optimized ASM', path: 'part6-target-optimization', category: '优化进阶'},
+  {title: 'IR 优化', label: 'IR OPTIMIZATION', description: '在保持语义不变的前提下，完成数据流分析、常量传播与死代码消除。', from: 'LLVM IR', to: 'Optimized IR', path: 'part5-ir-optimization', category: '优化进阶'},
+  {title: '目标代码优化', label: 'TARGET OPTIMIZATION', description: '面向 RISC-V 指令，练习寄存器分配、溢出处理与窥孔优化。', from: 'RISC-V', to: 'Optimized ASM', path: 'part6-target-optimization', category: '优化进阶'},
 ];
 
 const resources = [
@@ -20,7 +20,21 @@ const resources = [
 ];
 
 function Arrow({diagonal = false}: {diagonal?: boolean}) {
-  return <span aria-hidden="true">{diagonal ? '↗' : '→'}</span>;
+  return (
+    <svg className={styles.arrowIcon} viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+      {diagonal ? <path d="M5 15 15 5M8 5h7v7" /> : <path d="M3 10h13M11 5l5 5-5 5" />}
+    </svg>
+  );
+}
+
+function CapstoneMark() {
+  return (
+    <svg className={styles.capstoneIcon} viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+      <path d="M6 16h20M11 9l-5 7 5 7M21 9l5 7-5 7" />
+      <circle cx="6" cy="16" r="2" />
+      <circle cx="26" cy="16" r="2" />
+    </svg>
+  );
 }
 
 function CompilerPreview() {
@@ -54,14 +68,14 @@ export default function Home(): ReactNode {
           <div className={styles.container}>
             <div className={styles.heroGrid}>
               <div>
-                <div className={styles.eyebrow}><span className={styles.statusDot} /> 编译原理实验 · 从理解到实现</div>
-                <Heading as="h1" className={styles.title}>亲手构建，<br />你的第一个<span>编译器。</span></Heading>
-                <p className={styles.subtitle}>从一行 ToyC 代码出发，走过词法、语法与中间表示，<br className={styles.desktopBreak} />最终抵达 RISC-V。让课本里的原理，成为能运行的程序。</p>
+                <div className={styles.eyebrow}><span className={styles.statusDot} /> 编译系统实践 · ToyC 到 RISC-V</div>
+                <Heading as="h1" className={styles.title}>从 ToyC 到 RISC-V，<br />完成一套<span>编译器。</span></Heading>
+                <p className={styles.subtitle}>从词法、语法分析开始，依次完成 IR、代码生成和两轮优化；<br className={styles.desktopBreak} />每个阶段都能编译、运行并检查结果。</p>
                 <div className={styles.actions}>
                   <Link className={styles.primaryButton} to="/docs/labs/part1-lexer">开始实验 <Arrow /></Link>
-                  <Link className={styles.secondaryButton} to="/docs/labs/capstone">了解课程全貌 <Arrow diagonal /></Link>
+                  <Link className={styles.secondaryButton} to="/docs/labs/capstone">查看课程地图 <Arrow diagonal /></Link>
                 </div>
-                <div className={styles.heroMeta}><span><strong>06</strong> 个递进实验</span><span><strong>01</strong> 个完整编译器</span><span>从零实现 · 逐步验证</span></div>
+                <div className={styles.heroMeta}><span><strong>06</strong> 个递进实验</span><span><strong>01</strong> 套完整编译器</span><span>阶段产物可独立验证</span></div>
               </div>
               <CompilerPreview />
             </div>
@@ -71,7 +85,7 @@ export default function Home(): ReactNode {
 
         <section className={`${styles.container} ${styles.section}`} aria-labelledby="labs-title">
           <div className={styles.sectionHead}>
-            <div><p className={styles.kicker}>THE LEARNING PATH</p><Heading as="h2" id="labs-title">六个阶段，一条完整的编译之路</Heading><p className={styles.sectionDescription}>先让程序正确运行，再探索如何让它运行得更好。</p></div>
+            <div><p className={styles.kicker}>学习路径</p><Heading as="h2" id="labs-title">六个阶段，组成一条编译流程</Heading><p className={styles.sectionDescription}>先完成正确性，再处理中间表示和目标代码的优化。</p></div>
             <Link className={styles.textLink} to="/docs/labs/capstone">课程要求与目标 <Arrow /></Link>
           </div>
           <div className={styles.labGrid}>
@@ -84,14 +98,14 @@ export default function Home(): ReactNode {
               </Link>
             ))}
           </div>
-          <Link className={styles.capstone} to="/docs/labs/capstone"><span className={styles.capstoneIcon} aria-hidden="true">⌘</span><div><Heading as="h3">把每一步，连成一个完整作品</Heading><p>综合课程设计 · 整合编译流程，验证实现，准备报告与答辩。</p></div><span className={styles.capstoneLink}>进入综合设计 <Arrow /></span></Link>
+          <Link className={styles.capstone} to="/docs/labs/capstone"><CapstoneMark /><div><Heading as="h3">综合设计：接通六个阶段</Heading><p>把前端、IR、代码生成和优化整合起来，完成可运行的 ToyC 编译器。</p></div><span className={styles.capstoneLink}>查看要求 <Arrow /></span></Link>
         </section>
 
         <section className={styles.startSection} aria-labelledby="start-title">
           <div className={styles.container}>
-            <div className={styles.sectionHead}><div><p className={styles.kicker}>BEFORE YOU BUILD</p><Heading as="h2" id="start-title">写下第一行代码之前</Heading><p className={styles.sectionDescription}>准备好工具，明确约定，然后专注于实现。</p></div><Link className={styles.textLink} to="/docs/reference/faq">遇到问题？查看 FAQ <Arrow diagonal /></Link></div>
+            <div className={styles.sectionHead}><div><p className={styles.kicker}>开始前准备</p><Heading as="h2" id="start-title">先把环境和约定准备好</Heading><p className={styles.sectionDescription}>确认工具链、语言规则和提交流程，再开始编写代码。</p></div><Link className={styles.textLink} to="/docs/reference/faq">查看常见问题 <Arrow diagonal /></Link></div>
             <div className={styles.resourceGrid}>{resources.map(resource => <Link key={resource.number} className={styles.resource} to={resource.path}><span className={styles.resourceNumber}>{resource.number} /</span><Heading as="h3">{resource.title}</Heading><p>{resource.description}</p><span className={styles.textLink}>{resource.action} <Arrow /></span></Link>)}</div>
-            <div className={styles.bottomNote}><span>每一个 Token，都是理解程序的开始。</span><Link to="/docs/labs/part1-lexer">从词法分析出发 <Arrow /></Link></div>
+            <div className={styles.bottomNote}><span>建议从词法分析开始，按顺序完成每个实验。</span><Link to="/docs/labs/part1-lexer">进入第一个实验 <Arrow /></Link></div>
           </div>
         </section>
       </main>

@@ -36,7 +36,7 @@ Stmt        -> Block
             | 'while' '(' Expr ')' Stmt
             | 'break' ';'
             | 'continue' ';'
-            | 'return' Expr ';'
+            | 'return' [ Expr ] ';'
 
 Expr        -> LOrExpr
 LOrExpr     -> LAndExpr | LOrExpr '||' LAndExpr
@@ -75,13 +75,13 @@ int  void  const  if  else  while  break  continue  return
 
 ### 整数
 
-终结符 `NUMBER` 识别十进制整数常量：
+终结符 `NUMBER` 识别不带正负号的十进制整数常量：
 
 ```text
--?(0|[1-9][0-9]*)
+(0|[1-9][0-9]*)
 ```
 
-推荐在词法阶段将负号识别为 `-` 运算符，由 `UnaryExpr` 处理；如果将负号并入 `NUMBER`，必须在报告中说明并保持 Token 输出一致。
+负号统一识别为 `-` 运算符，由 `UnaryExpr` 处理。因此 `-3` 的 Token 序列是 `'-'`、`IntConst(3)`，各实验不再为负数另设词法规则。
 
 ### 运算符与界符
 

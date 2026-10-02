@@ -138,12 +138,12 @@ const config: Config = {
           title: '相关资源',
           items: [
             {
-              label: 'Dragon Book（编译原理）',
-              href: 'https://en.wikipedia.org/wiki/Compilers:_Principles,_Techniques,_and_Tools',
+              label: 'Compilers: Principles, Techniques, and Tools',
+              href: 'https://www.pearson.com/en-us/subject-catalog/p/compilers-principles-techniques-and-tools/P200000003472/9780133002140',
             },
             {
-              label: 'Docusaurus 文档',
-              href: 'https://docusaurus.io/docs',
+              label: 'Modern Compiler Implementation in C',
+              href: 'https://www.cs.princeton.edu/~appel/modern/c/',
             },
           ],
         },
@@ -161,7 +161,7 @@ const config: Config = {
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} 编译原理课程组 · Built with Docusaurus`,
+      copyright: '编译系统实践课程 · 助教维护',
     },
     prism: {
       theme: prismThemes.github,

@@ -11,8 +11,8 @@ description: 根据 ToyC 文法构造 AST，比较递归下降、LL(1) 与 LR �
 
 语法分析器（parser）读取第一部分产出的 Token 流，检查它是否符合 ToyC 文法，并构造出后续语义分析和 IR 生成要用的抽象语法树（AST）。
 
-:::tip[先建立直觉]
-词法分析把程序切成一个个"词"；语法分析接着按语法规则把这些词组织成一棵树，树的形状直接反映了运算的先后顺序。
+:::info[基本原理]
+语法分析依据文法将 Token 流组织为抽象语法树；树的层次结构表示运算符的优先级、结合性和程序结构。
 :::
 
 ```mermaid
@@ -34,6 +34,8 @@ flowchart TB
 | LL(1) | 预测分析表 + 显式栈 | 中 | 需要计算 FIRST / FOLLOW |
 | LR(0) / SLR(1) | 项目集 + ACTION/GOTO 表 | 高 | 分析能力最强，能处理更多文法 |
 
+三条路线的输入、输出和文法约定相同：都读取第一部分的 Token 流并生成同一套 AST。若选择 LL(1)，需要先消除左递归并提取左公因子；若选择 LR，则要在报告中说明冲突处理和归约动作。课程实现建议先用递归下降跑通，再把同一组样例用于路线对比。
+
 ## 二、ToyC 核心文法
 
 下面使用 EBNF 记号：`*` 表示重复零次或多次，`?` 表示可选，`|` 表示选择。
@@ -52,7 +54,7 @@ ConstDef    -> ID '=' Expr
 Stmt        -> Block | ';' | Expr ';' | ID '=' Expr ';'
              | 'if' '(' Expr ')' Stmt [ 'else' Stmt ]
              | 'while' '(' Expr ')' Stmt
-             | 'break' ';' | 'continue' ';' | 'return' Expr ';'
+             | 'break' ';' | 'continue' ';' | 'return' [ Expr ] ';'
 Expr        -> LOrExpr
 LOrExpr     -> LAndExpr | LOrExpr '||' LAndExpr
 LAndExpr    -> RelExpr | LAndExpr '&&' RelExpr

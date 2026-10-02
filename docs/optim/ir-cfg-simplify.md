@@ -23,9 +23,9 @@ br label %X
 L: br label %X       ; L 不可达
 ; 等价于： 删除 L，直接 fallthrough 到 X
 
-; 模式 3：跳转到下一块
-br label %N          ; 其中 N 就是下一条指令
-; 等价于： 删除 br，让控制流 fallthrough
+; 模式 3：跳转到下一块（仅在目标代码布局阶段省略跳转）
+br label %N          ; 其中 N 就是布局上的下一块
+; LLVM IR 仍须保留 terminator；后端发射时才可把它编码为 fall-through
 
 ; 模式 4：跳转到无条件跳转
 br label %L1
@@ -34,22 +34,22 @@ L1: br label %L2     ; "跳到跳转"
 ```
 
 ```mermaid
-%% 上下两块对比：Mermaid 会把后写的子图放在上方，所以先写「化简后」，
-%% 渲染出来才是上=化简前、下=化简后。
 flowchart LR
-  subgraph 化简后
-    A2[A] -- br L2 --> C2[L2]
-  end
-  subgraph 化简前
+  subgraph Before["化简前"]
+    direction TB
     A1[A] -- br L1 --> B1[L1]
     B1 -- br L2 --> C1[L2]
+  end
+  subgraph After["化简后"]
+    direction TB
+    A2[A] -- br L2 --> C2[L2]
   end
 ```
 
 改写后：
 
 - 不可达块内的指令会被 DCE 全部删除；
-- `phi` 节点失去某条入边，会被 DCE 一并清理（如果仅剩一条入边，则 `phi` 退化为普通 move）；
+- `phi` 节点失去某条入边时，先由 CFG 简化同步删除对应的 incoming 项；如果仅剩一条入边，再把 `phi` 替换为该值；
 - 基本块数量减少，数据流分析的不动点收敛更快。
 
 ## 二、phi 节点退化
@@ -89,13 +89,12 @@ B:
 `A` 的唯一后继是 `B`，且 `B` 没有其它前驱。可以把 `B` 的指令合并到 `A` 末尾，删除 `B` 本身。前提是 `B` 的 phi 节点只来自 `A`，否则合并会丢失信息。
 
 ```mermaid
-%% 同上：先写「合并后」，渲染出来才是上=合并前、下=合并后。
 flowchart LR
-  subgraph 合并后
-    A2[A: phi + ret]
-  end
-  subgraph 合并前
+  subgraph Before2["合并前"]
     A1[A] -- br --> B1[B: phi + ret]
+  end
+  subgraph After2["合并后"]
+    A2["A: phi + ret"]
   end
 ```
 
@@ -106,7 +105,7 @@ flowchart LR
 br i1 %c, label %T, label %F
 ```
 
-若 `%c` 是 `true`，删除 `F`，把 `T` 的指令复制到 `br` 之后；若 `%c` 是 `false`，反之。ToyC 中这条通常由 [常量传播](ir-cprop) 直接触发。
+若 `%c` 是 `true`，把当前块的后继改为 `T`；若 `%c` 是 `false`，改为 `F`。随后从入口重新做可达性分析，删除不再可达的块并更新相关 `phi` incoming 项。不要把目标块的指令直接复制到当前块，否则会破坏 SSA 定义和块边界。ToyC 中这条通常由 [常量传播](ir-cprop) 直接触发。
 
 ## 五、执行顺序与迭代
 
@@ -151,7 +150,7 @@ flowchart TB
 14:         end for
 15:         // 3. 合并 A -> B 且 B 仅有 A 一个前驱的块
 16:         for each edge (A -> B) do
-17:             if B.predecessors has only A and B has no phi then
+17:             if B.predecessors has only A and (B has no phi or all phi can be simplified) then
 18:                 inline B into A;  changed = true;
 19:             end if
 20:         end for
@@ -164,7 +163,7 @@ flowchart TB
 
 | 陷阱 | 处理 |
 | --- | --- |
-| `volatile load` / `call io` | 不能删除不可达块中的副作用指令；扫描时按"假设不可达块内副作用仍要执行"的安全语义处理 |
+| `volatile load` / `call io` | 可达块中的副作用必须保留；只有可达性分析已经证明整个块不可达时，才可连同这些指令一起删除 |
 | `unreachable` 之后的块 | 严格意义上未定义，但 LLVM IR 的 `unreachable` 明确告诉优化器可以删 |
 | 块合并破坏 phi 唯一性 | 合并前要确认 phi 的所有入边都来自同一前驱 |
 | `invoke` / `landingpad` | 涉及异常处理的指令不能随便合并；ToyC 暂不涉及 |

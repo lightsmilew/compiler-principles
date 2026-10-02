@@ -14,7 +14,7 @@ description: 删除结果未被使用且无副作用的指令，包括基于活�
 
 一条指令是"死"的，当且仅当：
 
-1. 它的结果值不出现在任何活跃变量集合（出口处无 use）；
+1. 它的结果对保留的计算和可观察行为没有贡献；最简单的判据是结果没有任何 use；
 2. 它本身没有可观察的副作用（不是 `store`、`call`、`br`、I/O、内存屏障）。
 
 例如：
@@ -38,23 +38,25 @@ store i32 %y, i32* %p     ; 即使写入位置未再读取，也不能删除
 
 ## 二、基于活跃分析的 DCE
 
-利用 [基本块与 CFG](ir-cfg) 计算出的 `live_out`，对每条指令检查其结果是否在 `live_out` 中：
+利用 [基本块与 CFG](ir-cfg) 计算出的 `live_out`，从块末尾逐条反向更新活跃集合。块出口不活跃的值仍可能在块内被使用，不能直接按 `live_out` 删除：
 
 ```cpp
 void eliminate_dead_in_block(BasicBlock& B) {
     auto alive = B.live_out;
+    auto terminator_uses = B.terminator.operands();
+    alive.insert(terminator_uses.begin(), terminator_uses.end());
     // 倒序扫描块内指令，最后使用的最先生效
     for (auto it = B.instructions.rbegin(); it != B.instructions.rend(); ++it) {
         auto uses = it->operands();
         auto defs = it->results();
-        bool has_side_effect = it->is_call() || it->is_store()
-                            || it->is_volatile() || it->diverges();
+        bool has_side_effect = !it->is_safe_to_remove();
         bool result_used = any_of(defs, [&](Value* v) {
             return alive.count(v) > 0;
         });
         if (!has_side_effect && !result_used) {
             B.erase(it);
         } else {
+            for (auto* v : defs) alive.erase(v);
             alive.insert(uses.begin(), uses.end());
         }
     }
@@ -67,7 +69,7 @@ void eliminate_dead_in_block(BasicBlock& B) {
 flowchart TD
   Start[live_out 已知] --> Iter[倒序遍历块内指令]
   Iter --> Q{当前指令 I}
-  Q -->|有副作用或被使用| Keep[保留 I<br/>把 I 的操作数加入 alive 集合]
+  Q -->|有副作用或被使用| Keep[保留 I<br/>先移除定义，再加入操作数]
   Q -->|无副作用且无 use| Drop[删除 I]
   Keep --> Iter
   Drop --> Iter
@@ -122,12 +124,16 @@ flowchart TD
 
 ## 四、不可达代码
 
-DCE 的常见副作用是触发不可达代码（unreachable code）：当条件分支的两个目标相同，或者某分支永远为真/假，控制流图会出现空块。
+不可达代码与“结果无人使用”是两种不同情况。常量传播或分支简化可能使某块无法从入口到达；这种块即使含有 I/O，也可由 CFG 可达性检查整体删除。
 
 ```llvm
-br i1 true, label %L1, label %L2   ; L2 永远不可达
-br label %L1                        ; 紧跟空块的 br 也可以删除
+; 化简前
+br i1 true, label %L1, label %L2
+; 化简后
+br label %L1
 ```
+
+只有确认 `%L2` 没有其它可达前驱时，才能删除它。LLVM 基本块仍须保留末尾终结指令，不能因为目标块紧邻就删掉 IR 的 `br`。
 
 控制流简化（见 [控制流简化](ir-cfg-simplify)）通常与 DCE 配合成一对迭代：先删死代码再压扁空块，再算新的活跃集合，再删新的死代码，直到不动点。
 
@@ -149,7 +155,7 @@ DCE 不能简单地删除所有"无人使用"的指令，必须同时考虑：
 | `call` | 否 | 可能影响 I/O / 全局状态 |
 | `volatile load` | 否 | 必须保留 |
 | `br` / `ret` | 否 | 控制流指令 |
-| `unreachable` 之后 | 是 | 不可达块的指令全部可删 |
+| 从入口不可达的块 | 是 | 可达性分析证明该块不会执行 |
 
 ## 六、与其它优化的关系
 
@@ -157,7 +163,7 @@ DCE 是其它优化的"清扫工"：
 
 - 常量折叠后，多余的算术往往没有 use，需要 DCE 清理；
 - CSE 替换后，旧定义可能失去 use，需要 DCE 删除；
-- 控制流简化删除空块后，块内的 `phi` 失去某条入边，需要 DCE 一并清掉。
+- 控制流简化负责更新 `phi` 的 incoming 项；DCE 再删除失去使用的值定义。
 
 把 DCE 放在优化管线末尾（或迭代到不动点）能持续回收空间。
 

@@ -17,7 +17,7 @@ LLVM IR 是 SSA 形式的线性指令列表，但函数中包含标签（label�
 划分基本块时遵守以下规则：
 
 1. 入口：函数第一指令；每条终结指令的目标标签；紧跟一条终结指令的下一条指令。
-2. 出口：终结指令之前的所有指令都属于当前基本块。
+2. 出口：当前块包含其末尾的终结指令；下一条指令必须属于新块。
 3. 终结指令：`br`、`ret`、`switch` 等会改变控制流的指令。
 
 ```llvm
@@ -53,13 +53,14 @@ struct BasicBlock {
     std::vector<BasicBlock*> successors;     // 后继
     std::set<Value*> use;                    // 向上暴露的使用
     std::set<Value*> def;                    // 块内定义
+    std::map<BasicBlock*, std::set<Value*>> phi_use; // 从该块到后继的 phi 边使用
     std::set<Value*> live_in;                // 入口活跃
     std::set<Value*> live_out;               // 出口活跃
 };
 ```
 
 `use` 收集在任何定义之前就被引用的 SSA 值；
-`def` 收集块内新定义的值。`phi` 指令既不计入 `use` 也不计入 `def`。
+`def` 收集块内新定义的值，包括 `phi` 的结果。`phi` 的操作数不计入当前块的 `use`：每个 incoming 值是在对应前驱到当前块的边上被使用的，需要单独记录为 `phi_use[P, B]`。
 
 ## 三、CFG 的构造
 
@@ -74,20 +75,22 @@ CFG 的构造分两步：
  1: blocks = [];  current = newBlock();
  2: for each instruction I in function do
  3:     if I is a label then                            // 标签开启一个新块
- 4:         if current not empty then blocks.push(current); end if
+ 4:         if current has label or current.instructions not empty then blocks.push(current); end if
  5:         current = newBlock(label = I.name);
- 6:     end if
- 7:     current.instructions.push(I);
- 8:     if I is a terminator then                       // 终结指令结束当前块
- 9:         blocks.push(current);  current = newBlock();
-10:     end if
-11: end for
-12: for each block B in blocks do
-13:     for each target T in successorsOf(B.terminator) do
-14:         B.successors.push(T);  T.predecessors.push(B);   // 建立双向边
-15:     end for
-16: end for
-17: return blocks;
+ 6:     else if I is a terminator then                  // 终结指令单独存放并结束当前块
+ 7:         current.terminator = I;
+ 8:         blocks.push(current);  current = newBlock();
+ 9:     else
+10:         current.instructions.push(I);
+11:     end if
+12: end for
+13: if current has label or current.instructions not empty then blocks.push(current); end if
+14: for each block B in blocks do
+15:     for each target T in successorsOf(B.terminator) do
+16:         B.successors.push(T);  T.predecessors.push(B);   // 建立双向边
+17:     end for
+18: end for
+19: return blocks;
 ```
 
 其中终结指令与后继的对应关系为：
@@ -114,7 +117,7 @@ flowchart LR
 数据流方程：
 
 ```text
-live_out[B] = ∪ live_in[S]   for all S in successors[B]
+live_out[B] = ∪ (live_in[S] ∪ phi_use[B, S])   for all S in successors[B]
 live_in[B]  = use[B] ∪ (live_out[B] − def[B])
 ```
 
@@ -125,7 +128,7 @@ bool changed = true;
 while (changed) {
   changed = false;
   for (auto& B : postorder(cfg)) {
-    auto new_out = set_union(live_in_of_successors(B));
+    auto new_out = union_of_successor_live_in_and_phi_edge_uses(B);
     auto new_in = use[B] | (new_out - def[B]);
     if (new_out != B.live_out || new_in != B.live_in) {
       B.live_out = new_out; B.live_in = new_in; changed = true;
@@ -134,15 +137,15 @@ while (changed) {
 }
 ```
 
-反向后序遍历能让信息尽快传播到前驱，但反向数据流的标准做法是反向后序或 RPO。
+反向数据流通常按 CFG 的后序扫描，使后继信息较早传到前驱；遍历顺序只影响收敛速度，不改变不动点结果。
 
 ## 五、应用与延伸
 
 构造 CFG 之后，几乎所有机器无关优化都以它作为输入：
 
-- 死代码消除：删除结果未出现在任何 `live_out` 中的指令；
+- 死代码消除：从 `live_out` 开始反向扫描，删除结果在该指令之后不活跃、且无副作用的指令；
 - 公共子表达式消除：在支配路径上复用相同操作的结果；
 - 循环优化：识别回边（back edge）以识别自然循环，进而做 LICM、强度削减；
 - 寄存器分配：活跃区间正是从 CFG 的 `live_in/live_out` 派生出来的。
 
-下一步阅读：[mem2reg：把内存访问提升为 SSA](ir-mem2reg)——它是把变量从内存搬进寄存器的第一步。
+下一步阅读：[mem2reg：把内存访问提升为 SSA](ir-mem2reg)——它先把栈上的内存访问改写为 SSA 值，再由后端决定物理寄存器分配。

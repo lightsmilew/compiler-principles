@@ -9,8 +9,8 @@ description: 在 RISC-V64GC 目标代码层实现寄存器分配、spill 和窥�
 
 本部分处理第四部分生成的 RISC-V64GC 汇编。重点是寄存器分配、溢出处理和窥孔优化，目标是在保持语义的前提下减少内存访问和指令数量。
 
-:::tip[先建立直觉]
-IR 中的临时值数量不受限制，物理寄存器却只有几十个。寄存器分配解决的就是这个矛盾：哪些值留在寄存器，哪些值写回内存；窥孔优化则负责删除局部可见的冗余指令。
+:::info[基本原理]
+IR 中的临时值数量可以超过物理寄存器数量。寄存器分配决定各个值在寄存器与栈槽之间的存放位置；窥孔优化在局部指令范围内识别并消除冗余。
 :::
 
 **优化顺序应固定为**：先建立第四部分的正确基线 → 在目标指令上计算活跃信息和寄存器冲突 → 完成寄存器分配 → 最后执行不依赖全局信息的窥孔规则。每一步都要保留输入输出，便于定位错误。
@@ -26,7 +26,7 @@ flowchart TB
 
 ## 一、从 Use-Def 到活跃区间
 
-对每条目标指令编号，记录每个寄存器的"第一次定义位置"和"最后一次使用位置"，就得到一个活跃区间（live range）：
+对每条目标指令编号，把每次定义视为一个独立的值版本，记录该版本的定义位置和最后一次使用位置，就得到一个活跃区间（live range）：
 
 ```asm
 0: lw   t0, 0(fp)        ; 定义 v
@@ -36,41 +36,38 @@ flowchart TB
 4: mul  t2, t0, t1       ; 使用新的 t0
 ```
 
-上面的 `t0` 其实有两段活跃区间：第一段 `[0, 1]`（值 v），第二段 `[3, 4]`。
+上面的 `t0` 其实有两个值版本和两段活跃区间：第一段 `[0, 2)`（值 v），第二段 `[3, 5)`；同名寄存器重新定义后，不能把两段区间合并。
 
 **算法 1 · 构造活跃区间（Build Live Ranges）**
 
 **输入（Input）：** 带指令编号的目标汇编代码。
-**输出（Output）：** 每个值（寄存器）的活跃区间列表。
+**输出（Output）：** 每个值版本的活跃区间列表。
 
 ```
  1: buildLiveRanges(code):
- 2:     last_use = Map<Reg, int>();                     // 每个寄存器的最后使用位置
- 3:     for i = 0 to len(code) - 1 do
- 4:         for each r in usesOf(code[i]) do last_use[r] = i; end for
- 5:     end for
- 6:     first_def = Map<Reg, int>();                     // 每个寄存器的第一次定义
- 7:     for i = 0 to len(code) - 1 do
- 8:         for each r in defsOf(code[i]) do
- 9:             if r ∉ first_def then first_def[r] = i; end if
-10:         end for
-11:     end for
-12:     ranges = [];
-13:     for each (r, def) in first_def do
-14:         if r ∈ last_use then
-15:             ranges.push( LiveRange(r, start = def, end = last_use[r] + 1) );   // 半开区间
-16:         end if
-17:     end for
-18:     return ranges;
+ 2:     open = Map<Reg, LiveRange>();                    // 当前寄存器值版本
+ 3:     ranges = [];
+ 4:     for each incoming value r do open[r] = LiveRange(reg = r, start = 0, end = 1, used = false); end for
+ 5:     for i = 0 to len(code) - 1 do
+ 6:         for each r in usesOf(code[i]) do
+ 7:             if r in open then open[r].end = i + 1; open[r].used = true; end if
+ 8:         end for
+ 9:         for each r in defsOf(code[i]) do
+10:             if r in open and open[r].used then ranges.push(open[r]); end if // 重新定义：结束旧版本
+11:             open[r] = LiveRange(reg = r, start = i, end = i + 1, used = false);
+12:         end for
+13:     end for
+14:     for each range in open do if range.used then ranges.push(range); end if end for
+15:     return ranges;                                    // 半开区间 [start, end)
 ```
 
-上面的算法是单个基本块内的局部活跃区间。真正的活跃区间要跨基本块扩展：先做一次反向数据流分析求出每个块入口/出口活跃的寄存器，再与块内的区间取并集。
+上面的算法先说明单个线性序列的值版本切分；跨基本块时，还要把块入口/出口的活跃值并入对应区间，并处理从函数入口传入、但在函数内没有定义的参数值。
 
 ## 二、冲突图（Interference Graph）
 
 两个值的活跃区间一旦重叠，就不能分配同一个物理寄存器。把这种约束建模为图：
 
-- **节点**：每个活跃区间对应的寄存器；
+- **节点**：每个活跃区间对应的值版本；
 - **边**：`A` 和 `B` 在某个程序点同时活跃 → 连一条边。
 
 **算法 2 · 构造冲突图（Build Interference Graph）**
@@ -78,14 +75,16 @@ flowchart TB
 **输入（Input）：** 活跃区间列表。
 **输出（Output）：** 冲突图 `G`。
 
+这里的 `id` 是值版本的唯一编号；同一寄存器的不同定义必须有不同 `id`。
+
 ```
  1: buildInterference(ranges):
  2:     G = new Graph();
- 3:     for each r in ranges do G.addNode(r.reg); end for
+ 3:     for each r in ranges do G.addNode(r.id); end for
  4:     for each pair (r1, r2) in ranges do
- 5:         if r1.reg == r2.reg then continue; end if
+ 5:         if r1.id == r2.id then continue; end if
  6:         if r1.start < r2.end and r2.start < r1.end then
- 7:             G.addEdge(r1.reg, r2.reg);              // 区间重叠 -> 冲突
+ 7:             G.addEdge(r1.id, r2.id);                // 区间重叠 -> 冲突
  8:         end if
  9:     end for
 10:     return G;
@@ -94,18 +93,15 @@ flowchart TB
 下面这张图把示例代码的活跃区间、重叠位置以及导出的冲突图一次性画出来：
 
 ```mermaid
-%% 上下两块：先写「冲突图」，渲染出来才是上=活跃区间、下=冲突图；
-%% 活跃区间之间用不可见连线（~~~）竖排，保证自上而下按程序点先后排列。
+%% 每个值版本使用独立节点，避免把同名寄存器的两段区间误合并。
 flowchart LR
   subgraph 冲突图
-    A[t0] --- B[t1]
-    A --- C[t2]
-    B --- C
+    A[t0₀] --- B[t1]
+    B --- C[t0₁]
   end
   subgraph 活跃区间
-    R0["t0 第一段：0 到 1"] ~~~ R1["t1：1 到 4"]
-    R1 ~~~ R2["t0 第二段：3 到 4"]
-    R2 ~~~ R3["t2：4 到 5"]
+    R0["t0₀：0 到 2"] ~~~ R1["t1：1 到 4"]
+    R1 ~~~ R2["t0₁：3 到 5"]
   end
 ```
 
@@ -126,7 +122,7 @@ flowchart LR
 
 ### 2.2 move-aware 冲突图
 
-`mv t0, t1` 这类传送指令的两端"天然不冲突"（它们本来就该放到同一个寄存器，从而删掉这条 `mv`）。因此在构造冲突图时，可以对 move 相关的一对寄存器不连边，给后续的合并（coalescing）留出机会。
+`mv t0, t1` 这类传送指令会记录一对 move-related 值；只有当两段活跃区间没有冲突、且合并不会超过寄存器压力时，才可以尝试把它们放到同一物理寄存器并删除这条 `mv`。不能因为出现 `mv` 就直接跳过冲突边。
 
 ## 三、线性扫描寄存器分配
 
@@ -166,7 +162,7 @@ flowchart LR
 
 ## 四、图着色寄存器分配
 
-图着色（Graph Coloring）是经典的最优性更好的寄存器分配算法：把活跃区间视为节点、冲突视为边，用 `K` 种颜色（即 `K` 个物理寄存器）着色，使每条边的两端颜色不同。`K ≥ 3` 的图着色是 NP 完全问题，所以实际实现使用启发式：
+图着色（Graph Coloring）是寄存器分配的经典模型：把活跃区间视为节点、冲突视为边，用 `K` 种颜色（即 `K` 个物理寄存器）着色，使每条边的两端颜色不同。`K ≥ 3` 的图着色判定问题是 NP 完全问题，所以实际实现使用启发式：
 
 ```mermaid
 flowchart TD
@@ -295,7 +291,7 @@ toyc-cpp/           # 仓库目录名由你决定，此处以 toyc-cpp 为例
 | --- | --- | --- |
 | [活跃区间与冲突图](../optim/asm-liveness) | 虚拟寄存器活跃区间、冲突图、调用约定、move-aware | 寄存器分配的前置 |
 | [线性扫描寄存器分配](../optim/asm-linear-scan) | 扫描算法、跨调用处理、栈槽分配 | 实现简单、性能足够 |
-| [图着色寄存器分配](../optim/asm-graph-coloring) | 简化、合并、冻结、spill 选择、回填颜色 | 加分项 |
+| [图着色寄存器分配](../optim/asm-graph-coloring) | 简化、合并、冻结、spill 选择、回填颜色 | 寄存器分配的进阶方案 |
 | [Spill / Reload](../optim/asm-spill) | 溢出代码模式、rematerialization、栈槽分配、spill 优化 | 不可避免的副产品 |
 | [窥孔优化](../optim/asm-peephole) | 局部模式匹配、规则迭代、典型规则 | 与寄存器分配配合 |
 | [强度削减](../optim/asm-strength-reduction) | 乘常量换移位与加法、派生归纳变量 | 只做可直接验证等价的局部替换；除常量换魔数属于[第五部分](../optim/ir-strength-reduction) |

@@ -23,19 +23,19 @@ IR 层的 SSA 值是无限的，到了汇编层才有"寄存器压力"的概念�
 
 ```text
 活跃区间 [start, end)
-  start: 值第一次被定义的指令编号
-  end:   值最后一次被使用的指令编号
+  start: 某个值版本被定义的指令编号
+  end:   该值版本最后一次被使用位置的后一位
 ```
 
 ```asm
 0: lw   t0, 0(fp)        ; 定义 v
 1: add  t1, t0, a0       ; 使用 v
 2: sw   t1, 4(fp)        ; 写 t1
-3: add  t0, t1, a0       ; t0 重新定义；旧值 v 的活跃区间 [0, 1] 结束
+3: add  t0, t1, a0       ; t0 重新定义；旧值 v 的活跃区间 [0, 2) 结束
 4: mul  t2, t0, t1       ; t2 用 t0 和 t1
 ```
 
-上面的 `t0` 实际上有两个区间：第一个 `[0, 1]`（v 用途）、第二个 `[3, 4]`。
+上面的 `t0` 实际上有两个区间：第一个 `[0, 2)`（v 用途）、第二个 `[3, 5)`；`t2` 在示例中没有后续使用，可以不进入冲突图。
 
 ### 2.2 构造
 
@@ -44,25 +44,24 @@ IR 层的 SSA 值是无限的，到了汇编层才有"寄存器压力"的概念�
 **算法 1 · 构造活跃区间（Build Live Ranges）**
 
 **输入（Input）：** 已编号的汇编指令序列。
-**输出（Output）：** 每个虚拟寄存器的活跃区间 `[start, end)`。
+**输出（Output）：** 每个值版本的活跃区间 `[start, end)`。
 
 ```
  1: buildLiveRanges(code):
- 2:     last_use = Map<Reg, int>();                      // 每个寄存器最后一次被使用的位置
- 3:     first_def = Map<Reg, int>();                     // 每个寄存器第一次被定义的位置
- 4:     for i = 0 to len(code) - 1 do
- 5:         for each r in usesOf(code[i]) do last_use[r] = i; end for
- 6:         for each r in defsOf(code[i]) do
- 7:             if r ∉ first_def then first_def[r] = i; end if
+ 2:     open = Map<Reg, LiveRange>();                     // 当前寄存器值版本
+ 3:     ranges = [];
+ 4:     for each incoming value r do open[r] = LiveRange(reg = r, start = 0, end = 1, used = false); end for
+ 5:     for i = 0 to len(code) - 1 do
+ 6:         for each r in usesOf(code[i]) do
+ 7:             if r in open then open[r].end = i + 1; open[r].used = true; end if
  8:         end for
- 9:     end for
-10:     ranges = [];
-11:     for each (r, def) in first_def do
-12:         if r ∈ last_use then
-13:             ranges.push( LiveRange(reg = r, start = def, end = last_use[r] + 1) );
-14:         end if
-15:     end for
-16:     return ranges;
+ 9:         for each r in defsOf(code[i]) do
+10:             if r in open and open[r].used then ranges.push(open[r]); end if // 重新定义：结束旧版本
+11:             open[r] = LiveRange(reg = r, start = i, end = i + 1, used = false);
+12:         end for
+13:     end for
+14:     for each range in open do if range.used then ranges.push(range); end if end for
+15:     return ranges;                                    // 半开区间 [start, end)
 ```
 
 ### 2.3 跨越基本块
@@ -77,11 +76,11 @@ IR 层的 SSA 值是无限的，到了汇编层才有"寄存器压力"的概念�
 
 ## 三、冲突图（Interference Graph）
 
-两个活跃区间重叠时，它们对应的虚拟寄存器不能在同一个物理寄存器中共存。
+两个值版本的活跃区间重叠时，这两个版本不能共用同一个物理寄存器。
 把这种约束建模为图：
 
 ```text
-节点：每个活跃区间对应的虚拟寄存器
+节点：每个活跃区间对应的值版本
 边：A 和 B 同时在某个程序点活跃 → (A, B) ∈ E
 ```
 
@@ -92,14 +91,16 @@ IR 层的 SSA 值是无限的，到了汇编层才有"寄存器压力"的概念�
 **输入（Input）：** 活跃区间列表。
 **输出（Output）：** 冲突图 `G`。
 
+这里的 `id` 是值版本的唯一编号；同一寄存器的不同定义必须有不同 `id`。
+
 ```
  1: buildInterference(ranges):
  2:     G = new Graph();
- 3:     for each r in ranges do G.addNode(r.reg); end for
+ 3:     for each r in ranges do G.addNode(r.id); end for
  4:     for each pair (r1, r2) in ranges do
- 5:         if r1.reg == r2.reg then continue; end if
+ 5:         if r1.id == r2.id then continue; end if
  6:         if r1.start < r2.end and r2.start < r1.end then
- 7:             G.addEdge(r1.reg, r2.reg);               // 区间重叠 -> 连边
+ 7:             G.addEdge(r1.id, r2.id);                  // 区间重叠 -> 连边
  8:         end if
  9:     end for
 10:     return G;                                        // move 相关边在合并阶段再处理
@@ -108,19 +109,15 @@ IR 层的 SSA 值是无限的，到了汇编层才有"寄存器压力"的概念�
 下面这张图把上面汇编示例的活跃区间、它们彼此重叠的位置，以及由此导出的冲突图一次性画出来：
 
 ```mermaid
-%% 说明：Mermaid 会把并列的子图从右向左摆放，这里先写"冲突图"、
-%% 再写"活跃区间"、最后写"程序点"，渲染出来才是 程序点 → 活跃区间 → 冲突图
-%% 的自然阅读顺序。活跃区间之间用不可见连线（~~~）竖排，避免该栏横向拉长。
+%% 每个值版本使用独立节点，避免把同名寄存器的两段区间误合并。
 flowchart TB
   subgraph 冲突图
-    A[t0] --- B[t1]
-    A --- C[t2]
-    B --- C
+    A[t0₀] --- B[t1]
+    B --- C[t0₁]
   end
   subgraph 活跃区间
-    R0[t0: 0,1] ~~~ R1[t1: 1,4]
-    R1 ~~~ R2[t0: 3,4]
-    R2 ~~~ R3[t2: 4,4]
+    R0["t0₀：0 到 2"] ~~~ R1["t1：1 到 4"]
+    R1 ~~~ R2["t0₁：3 到 5"]
   end
   subgraph 程序点 0 到 4
     P0[0: lw t0, 0 fp] --> P1[1: add t1, t0, a0]

@@ -43,7 +43,7 @@ L1:  ...                →   bne t0, zero, L2
                           ...
 
 beqz t0, L1
-bnez t0, L1            →   unreachable      （条件互斥但都跳到同一处）
+bnez t0, L1            →   j L1             （两个条件覆盖全部情况）
 ```
 
 ### 2.3 冗余 load/store
@@ -53,7 +53,7 @@ lw    t0, slot
 sw    t0, slot          →   删除 sw         （值未变）
 
 lw    t0, slot
-addi  t0, t0, 0         →   mv t0, slot （但常常被前面已优化掉）
+addi  t0, t0, 0         →   lw t0, slot    （删除无效的 addi）
 ```
 
 ### 2.4 算术恒等
@@ -87,10 +87,7 @@ sw t0, slot              →   lw  t0, slot
 
 ### 2.6 内存顺序与屏障
 
-```asm
-fence
-fence                     →   删除单条 fence（连续两条等价一条）
-```
+`fence` 会约束内存访问的可见顺序，不能仅凭相邻关系删除或合并。除非已经证明两条屏障的域和顺序完全等价，否则把它们视为不可移动、不可消除的指令。
 
 ## 三、规则匹配器
 
@@ -143,9 +140,9 @@ add %x, %y, %z
  1: peephole(code):
  2:     repeat
  3:         changed = false;  i = 0;
- 4:         while i + 2 <= len(code) do
+ 4:         while i < len(code) do
  5:             matched = 0;
- 6:             for each rule R in rules do                 // 窗口大小 2 ~ 3
+ 6:             for each rule R in rules do                 // 窗口大小 1 ~ 4
  7:                 if match(code, i, R) and guardOk(code, i, R) then
  8:                     apply(code, i, R);
  9:                     changed = true;
@@ -153,13 +150,14 @@ add %x, %y, %z
 11:                     break;
 12:                 end if
 13:             end for
-14:             i += max(1, matched);                       // 替换后回退一个窗口，便于连锁匹配
-15:         end while
-16:     until not changed                                   // 一轮无变化即结束
-17:     return code;
+14:             if matched > 0 then i = max(0, i + matched - 1); // 替换后回退一个位置
+15:             else i += 1; end if
+16:         end while
+17:     until not changed                                   // 一轮无变化即结束
+18:     return code;
 ```
 
-回退一个窗口是为了让新生成的指令能与前一条形成新模式（如删除 `mv` 后形成 `add t0, t0, 0`）。
+替换后回退一个位置，是为了让新生成的指令能与前一条形成新模式（如删除 `mv` 后形成 `add t0, t0, 0`）。
 
 ```mermaid
 flowchart TD

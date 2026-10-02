@@ -2,7 +2,7 @@
 sidebar_position: 2
 sidebar_label: mem2reg
 title: mem2reg：把内存访问提升为 SSA
-description: 把栈上的局部变量提升为 SSA 值，让变量直接保存在寄存器中，为后续优化接上 Use-Def 链
+description: 把栈上的局部变量提升为 SSA 值，接通 Use-Def 链，为后续优化和寄存器分配做准备
 ---
 
 # mem2reg：把内存访问提升为 SSA
@@ -12,7 +12,7 @@ mem2reg 是 memory-to-register 的缩写。它是机器无关优化的第一步�
 ```mermaid
 flowchart TB
   A["alloca / load / store<br/>变量在栈上"] --> B["mem2reg"]
-  B --> C["SSA 值<br/>变量在寄存器"]
+  B --> C["SSA 值<br/>变量不再依赖栈访问"]
   C --> D["常量传播 / CSE / DCE<br/>可沿 Use-Def 链工作"]
   C --> E["后端少发 lw / sw<br/>寄存器分配更简单"]
 ```
@@ -70,7 +70,7 @@ entry:
 }
 ```
 
-9 条指令被消除，函数变成 SSA 形式，变量的值直接由寄存器承载。
+9 条指令被消除，函数变成 SSA 形式；变量值由 SSA 名称表示，最终是否放入物理寄存器由后端寄存器分配决定。
 
 ## 二、哪些 alloca 可以被提升
 
@@ -201,7 +201,7 @@ DF(entry) = ∅        // entry 支配所有块，没有边界
  6:         for each S in DF(B) do                          // 遍历 B 的支配边界
  7:             if S ∉ PhiBlocks then
  8:                 PhiBlocks.add(S);
- 9:                 insertPhi(S, a);                        // 在 S 的入口插入 phi
+ 9:                 // 这里只收集位置，主算法统一插入 phi，避免重复插入
 10:                 if S is not a defining block then
 11:                     W.enqueue(S);                       // phi 本身也是一次新的定义
 12:                 end if
@@ -211,7 +211,7 @@ DF(entry) = ∅        // entry 支配所有块，没有边界
 16:     return PhiBlocks;
 ```
 
-第 10 行到第 12 行是关键：新插入的 `phi` 会定义一个新值，因此它也是一个新的定义点，需要继续向外扩散。这就是"迭代"的含义，也是必须用工作集队列反复处理的原因。
+第 7 行到第 12 行是关键：支配边界中新发现的块会被加入工作集，后续统一插入 `phi`；该 `phi` 会定义一个新值，因此它也是新的定义点，需要继续向外扩散。这就是“迭代”的含义，也是必须用工作集队列反复处理的原因。
 
 **算法 3 · 重命名（renaming）**
 
@@ -220,32 +220,29 @@ DF(entry) = ∅        // entry 支配所有块，没有边界
 
 ```
  1: rename(B, DT, promoted):
- 2:     for each a in promoted do
- 3:         valueStack[a].push(currentValue(a));            // 进入块，记录当前值
- 4:     end for
- 5:     for each instruction I in B do
- 6:         if I is a load from promoted alloca a then
- 7:             replaceAllUsesWith(I, peek(valueStack[a])); // 读：取栈顶的当前值
- 8:             remove(I);
- 9:         else if I is a store of v into promoted alloca a then
-10:             valueStack[a].push(v);                       // 写：压入新定义
-11:             remove(I);
-12:         end if
-13:     end for
-14:     for each successor S of B do                         // 先为后继的 phi 填入入边值
-15:         for each phi in S do
-16:             phi.addIncoming(peek(valueStack[phi.alloca]), B);
-17:         end for
-18:     end for
-19:     for each child C of B in DT do                       // 再深度优先递归支配树的子树
-20:         rename(C, DT, promoted);
-21:     end for
-22:     for each a in promoted do
-23:         valueStack[a].pop();                             // 回溯：恢复进入本块之前的状态
-24:     end for
+ 2:     savedDepth = depthsOf(valueStack);                  // 记录进入块前的栈深度
+ 3:     for each promoted phi P at the start of B do
+ 4:         valueStack[P.alloca].push(P.result);             // phi 是入口的新定义
+ 5:     end for
+ 6:     for each non-phi instruction I in B do
+ 7:         if I is a load from promoted alloca a then
+ 8:             replaceAllUsesWith(I, peek(valueStack[a])); // 读：取栈顶
+ 9:             remove(I);
+10:         else if I is a store of v into promoted alloca a then
+11:             valueStack[a].push(v);                      // 写：压入新定义
+12:             remove(I);
+13:         end if
+14:     end for
+15:     for each successor S of B do
+16:         for each promoted phi P in S do
+17:             P.addIncoming(peek(valueStack[P.alloca]), B);
+18:         end for
+19:     end for
+20:     for each child C of B in DT do rename(C, DT, promoted); end for
+21:     restoreDepths(valueStack, savedDepth);              // 弹出本块所有新增定义
 ```
 
-用栈记录当前值是这一步的核心：沿支配树深度优先递归，进块压入一个值、出块弹出一个值，栈顶始终是"该程序点上变量的最新定义"。第 14 行到第 18 行必须在递归子块之前完成，因为 `phi` 的入边值要按边的来路填写。
+用栈记录当前值是这一步的核心：沿支配树深度优先递归，入口 `phi` 和每条 `store` 都压入新定义，离开块时恢复到进入前的栈深度。开始重命名前，应按语言约定为每个变量提供初始值，或在语义阶段拒绝未初始化读取。后继 `phi` 的 incoming 值按前驱边填写。
 
 **算法 4 · 清理（removeDeadAllocas）**
 
@@ -263,7 +260,7 @@ DF(entry) = ∅        // entry 支配所有块，没有边界
 ```
 
 :::tip[不实现支配树时的替代方案]
-若暂时不想实现支配树，可用可达定义（reaching definition）数据流分析做简化版：对每个程序点求出该变量的最新定义。由于 ToyC 没有指针和别名，简化版足够正确，代价是 O(n²) 量级，对课程规模的程序仍然够用。
+第一版可只提升单基本块内、所有读取都有明确前置写入的局部标量。跨块的可达定义可能有多个，不能任意选择“最新定义”；遇到汇合或循环仍须构造 `phi`，或保留原来的内存访问。
 :::
 
 ## 六、完整示例
@@ -298,7 +295,7 @@ entry:
 
 while_cond:
     %i      = phi i32 [ 1, %entry ], [ %next, %end_if ]
-    %result = phi i32 [ 1, %entry ], [ %.result, %end_if ]
+    %result = phi i32 [ 1, %entry ], [ %prod, %end_if ]
     %cmp = icmp sle i32 %i, %n
     br i1 %cmp, label %while_body, label %while_exit
 

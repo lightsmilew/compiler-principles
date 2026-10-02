@@ -14,11 +14,11 @@ Spill 是寄存器分配不可避免的副产品：可用物理寄存器数量�
 ## 一、为什么需要 spill？
 
 ```text
-可用物理寄存器：s0~s11（12 个）+ t0~s6（7 个）+ a0~a7（参数，1~2 个可用作临时）≈ 18 个
-ToyC 函数体内常见活跃寄存器：超过 18 个
+可分配的通用寄存器需要按调用约定筛选：`s0~s11`（12 个）和 `t0~t6`（7 个）共 19 个；`a0~a7` 主要用于参数和返回值，不能直接按普通临时寄存器计入。
+如果函数中同时活跃的值超过可用寄存器数量，分配器就需要把部分值 spill 到栈上。
 ```
 
-如果函数有 25 个活跃区间同时存在，分配器就要把多余的 7 个值 spill 到栈上。
+如果示例函数有 25 个活跃区间同时存在，至少有 6 个值需要 spill；实际数量还会受到跨调用约束和保留寄存器的影响。
 
 ## 二、Spill 代码模式
 
@@ -42,21 +42,19 @@ add  t3, t4, a0
 观察到一种朴素 spill 在每次 use 前都要 `lw` 一次，代价较大。
 
 ```mermaid
-%% 两块面板上下排布：Mermaid 会把后写的子图放在上方，因此这里先写 rematerialization，
-%% 渲染出来才是上=朴素 spill、下=rematerialization；面板内部竖排，整图不会被横向拉长。
 flowchart LR
-  subgraph rematerialization
-    direction TB
-    D2[addi t_scratch, t1, 1] --> M2[mul t2, t_scratch, a0]
-    D2 --> M3[add t3, t_scratch, a0]
-  end
-  subgraph 朴素 spill
+  subgraph Naive["朴素 spill"]
     direction TB
     D1[addi t0, t1, 1] --> S1[sw t0, 16 sp]
     S1 --> L1[lw t4, 16 sp]
     L1 --> M1[mul t2, t4, a0]
     L1 --> L2[lw t4, 16 sp]
     L2 --> A1[add t3, t4, a0]
+  end
+  subgraph Remat["重算（rematerialization）"]
+    direction TB
+    D2[addi t_scratch, t1, 1] --> M2[mul t2, t_scratch, a0]
+    D2 --> M3[add t3, t_scratch, a0]
   end
 ```
 

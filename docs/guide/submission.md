@@ -11,6 +11,8 @@ description: Git 仓库可访问性、构建入口和希冀平台提交流程
 
 ## 一、仓库必须包含的内容
 
+编译器项目需要上传到 GitHub、Gitee 或 GitLab 等 Git 托管平台。提交评测时，希冀平台将从指定仓库拉取代码；仓库地址、访问令牌与分支名的填写格式见[提交到希冀平台](#六提交到希冀平台)。
+
 ```text
 toyc-cpp/                        # 仓库目录名由你决定，此处以 toyc-cpp 为例
 ├── CMakeLists.txt 或 Makefile / pom.xml / build.gradle / Cargo.toml
@@ -76,18 +78,31 @@ riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
 
 ## 六、提交到希冀平台
 
-以课程助教发布的希冀平台地址为准，平台需要以下字段：
+在课程助教发布的希冀平台入口提交评测时，需要提供以下信息：
 
-- **仓库地址**：GitHub、Gitee 或 GitLab 的 Git clone URL，例如 `https://gitee.com/<account>/<repository>.git`；
-- **分支名**：例如 `main` 或 `submission`；
-- **访问令牌**：仅在仓库为私有时填写，使用只读权限令牌；
+- **仓库地址**：GitHub、Gitee 或 GitLab 的 HTTPS Git clone URL，例如 `https://github.com/myuser/myproj.git`；
+- **访问令牌**：用于授权评测平台拉取仓库代码，需要具备该仓库的读取权限；
+- **分支名（可选）**：例如 `main` 或 `mybranchname`，填写时必须与远程仓库中的分支名称一致。
 
+希冀提交内容应包含访问令牌，按以下格式将用户名和令牌加入 HTTPS 仓库地址；如需指定分支，在地址后加一个空格和分支名：
 
-仓库地址必须是评测服务器可以访问的 clone URL，不要提交本机路径（如 `D:\work\...`、`/home/user/...`）或网页首页 URL。
+```text
+https://myuser:ghp_xxxxxx@github.com/myuser/myproj.git mybranchname
+```
 
-如果评测平台无法访问私有仓库，优先将仓库设为公开，或在希冀平台的令牌字段中填写只读令牌。不要把真实令牌写进 README、脚本、提交信息或仓库 URL；令牌一旦泄露应立即撤销并重新生成。
+其中 `myuser` 为账号名，`ghp_xxxxxx` 为示例令牌占位符，`myproj` 为仓库名，`mybranchname` 为可选分支名。提交时应替换为自己的仓库信息和有效令牌；Gitee、GitLab 仓库按同样结构填写对应的主机名、仓库路径和令牌。不指定分支时，省略地址后的分支名：
 
+```text
+https://myuser:ghp_xxxxxx@github.com/myuser/myproj.git
+```
 
+访问令牌的获取方法详见：
+
+- [GitHub 访问令牌获取方法](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens)
+- [Gitee 访问令牌获取方法](https://blog.csdn.net/weixin_42098295/article/details/134982972)
+- [GitLab 访问令牌获取方法](https://docs.gitlab.com/user/profile/personal_access_tokens/)
+
+仓库地址必须是评测服务器可以访问的 clone URL，不要提交本机路径（如 `D:\work\...`、`/home/user/...`）或仓库的网页地址。带令牌的 URL 仅填写在希冀提交入口，不要写入 README、脚本、提交信息或公开文档；令牌权限以拉取代码所需的最小权限为限。
 
 ## 七、提交前检查
 

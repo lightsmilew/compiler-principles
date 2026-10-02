@@ -602,17 +602,37 @@ div[class^='codeBlockContainer'] {
 /* --------------------------------------------------------------------------
    8. 侧边栏与目录
    -------------------------------------------------------------------------- */
+:root {
+  --doc-sidebar-width: 18rem;
+}
+
 .theme-doc-sidebar-container {
   border-right: 1px solid var(--cc-border) !important;
+  background: var(--cc-bg-subtle);
+}
+
+.theme-doc-sidebar-menu {
+  padding: 1rem 0.75rem 2rem;
 }
 
 .menu__link {
+  min-height: 2.25rem;
+  margin: 0.125rem 0;
+  padding: 0.45rem 0.75rem;
   border-radius: var(--cc-radius);
   font-size: 0.9rem;
   font-weight: 500;
   line-height: 1.4;
   transition: background-color var(--cc-duration-fast) var(--cc-ease),
-    color var(--cc-duration-fast) var(--cc-ease);
+    color var(--cc-duration-fast) var(--cc-ease),
+    border-color var(--cc-duration-fast) var(--cc-ease);
+  border-left: 3px solid transparent;
+}
+
+.menu__link:hover {
+  color: var(--ifm-menu-color-active);
+  background-color: var(--ifm-menu-color-background-hover);
+  text-decoration: none;
 }
 
 /* 选中态：所有激活的菜单项（叶子项 + 折叠分类标题）都得到同一套视觉提示 */
@@ -637,8 +657,56 @@ div[class^='codeBlockContainer'] {
   transition: background-color var(--cc-duration-fast) var(--cc-ease);
 }
 
+.menu__list-item-collapsible > .menu__link {
+  color: var(--cc-text-strong);
+  font-weight: 650;
+}
+
+.menu__list .menu__list {
+  margin: 0.2rem 0 0.45rem 0.8rem;
+  padding-left: 0.55rem;
+  border-left: 1px solid var(--cc-border);
+}
+
+.menu__list .menu__list .menu__link {
+  font-size: 0.86rem;
+}
+
+.menu__caret {
+  margin-inline-start: 0.35rem;
+}
+
 .menu__caret:hover {
   background: transparent;
+}
+
+/* 移动端抽屉沿用正文底色和边框，打开后仍能清楚区分层级。 */
+.navbar-sidebar {
+  background: var(--cc-bg-surface);
+  border-right: 1px solid var(--cc-border);
+}
+
+.navbar-sidebar__backdrop {
+  background: rgb(15 23 42 / 0.2);
+}
+
+[data-theme='dark'] .navbar-sidebar__backdrop {
+  background: rgb(0 0 0 / 0.42);
+}
+
+.navbar-sidebar .menu__list {
+  padding-inline: 0.75rem;
+}
+
+@media (min-width: 997px) {
+  .theme-doc-sidebar-container {
+    position: sticky;
+    top: var(--ifm-navbar-height);
+    height: calc(100vh - var(--ifm-navbar-height));
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--cc-border-strong) transparent;
+  }
 }
 
 .table-of-contents__link {
