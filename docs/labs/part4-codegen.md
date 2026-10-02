@@ -7,7 +7,7 @@ description: 将 LLVM IR 翻译为 RISC-V64GC 汇编，建立可运行的后端�
 
 # 第四部分 · 目标代码生成
 
-本部分把第三部分生成的 LLVM IR 翻译为可运行的 RISC-V64GC 汇编。完成本部分时就要具备一个能工作的基础寄存器分配策略（例如简单的线性扫描或保守的栈槽方案）；第五、六部分再分别优化 IR、寄存器分配和目标代码，并比较优化前后的结果。
+本部分把第三部分生成的 LLVM IR 翻译为可运行的 RISC-V64GC 汇编。完成本部分时就要具备一个能工作的基础寄存器分配策略（例如简单的线性扫描或保守的栈槽方案），并正确处理函数序言/尾声、`ra` 与被调用者保存寄存器、调用点的 caller-saved 值，以及寄存器溢出后的 spill/reload；第五、六部分再分别优化 IR、寄存器分配和目标代码，并比较优化前后的结果。
 
 :::info[基本原理]
 目标代码生成将机器无关的 IR 映射为 RISC-V 汇编，需要完成指令选择、寄存器分配以及栈帧和调用约定处理；无法驻留寄存器的值需要放入栈槽。
@@ -42,8 +42,8 @@ flowchart TB
  6:     end for
  7:
  8: codegenFunction(func):
- 9:     frame = computeFrameLayout(func);        // 第 3 步：先算栈帧（算法 5）
-10:     emitPrologue(func, frame);               // 第 1 步：序言（算法 6）
+ 9:     frame = computeFrameLayout(func);        // 第 3 步：先算栈帧（算法 6）
+10:     emitPrologue(func, frame);               // 第 1 步：序言（算法 7）
 11:     for each block in func.blocks do
 12:         codegenBlock(block);                 // 第 2 步：逐块翻译
 13:     end for
@@ -323,19 +323,19 @@ flowchart LR
 ```
  1: emitCall(instr):
  2:     func = instr.callee;  args = instr.arguments;
- 3:     // 1. 溢出参数（第 9 个及以后）写入栈溢出区
- 4:     for i = 8 to len(args) - 1 do
- 5:         loc = resolve(args[i]);
- 6:         storeToStack(loc, frame.arg_slots[i]);
- 7:     end for
- 8:     // 2. 前 8 个参数放入 a0 ~ a7
- 9:     for i = 0 to min(7, len(args) - 1) do
-10:         loadToRegister(resolve(args[i]), arg_reg[i]);   // arg_reg[i] = a0..a7
-11:     end for
-12:     // 3. 如果调用会破坏 caller-saved 寄存器中的活跃值，先保存
-13:     emitPushLiveCallerSaved();
+ 3:     // 1. 先保存仍然活跃的 caller-saved 值，避免被参数准备覆盖
+ 4:     emitPushLiveCallerSaved();
+ 5:     // 2. 溢出参数（第 9 个及以后）写入本次调用的栈参数区
+ 6:     for i = 8 to len(args) - 1 do
+ 7:         loc = resolve(args[i]);
+ 8:         storeToCallArgArea(loc, i);
+ 9:     end for
+10:     // 3. 前 8 个参数放入 a0 ~ a7
+11:     for i = 0 to min(7, len(args) - 1) do
+12:         loadToRegister(resolve(args[i]), arg_reg[i]);   // arg_reg[i] = a0..a7
+13:     end for
 14:     emit("call " + func.name);                         // 4. 调用
-15:     emitPopLiveCallerSaved();                          // 5. 恢复
+15:     emitPopLiveCallerSaved();                          // 5. 恢复调用者保存寄存器中的活跃值
 16:     // 6. 取返回值
 17:     if instr.result != none then
 18:         storeToLocation(a0, instr.result);              // 返回值在 a0
@@ -344,8 +344,9 @@ flowchart LR
 
 **溢出参数的具体做法**：
 
-- **调用者**负责在栈上分配溢出区（在当前栈帧内）；
-- 溢出参数按从右到左的顺序压栈，使第 9 个参数落在最低地址（`sp + 0`），被调函数用 `sp` + 固定偏移访问。
+- **调用者**负责在调用点分配对齐后的栈参数区，并在调用返回后回收；
+- 溢出参数按 ABI 约定写入栈参数区，使第 9 个参数位于约定的首个栈参数位置；被调函数按固定偏移访问；
+- `emitPushLiveCallerSaved` 与栈参数区共同使用一次对齐后的调用临时区，具体偏移由 `CallFrame` 记录，不能让两者互相覆盖。
 
 ```asm
     ; 假设有 9 个整数参数 arg0 ~ arg8
@@ -383,6 +384,8 @@ declare void @putint(i32)
 
 ### 4.1 栈帧结构
 
+本节中的“溢出”指**寄存器溢出（spill）**：当活跃值超过可用寄存器数量时，把值写入当前函数的 spill 槽，之后在使用前重新加载。它不是运行时栈空间耗尽；栈帧大小应在代码生成前按局部变量、保存寄存器、溢出值和对齐要求一次计算完成。
+
 ```
 高地址 ──────────────────────── 低地址
 │ 溢出参数区(第9+个参)           │ ← 由调用者分配（调用其他函数时）
@@ -416,20 +419,21 @@ declare void @putint(i32)
  5:         frame.slot_offsets[a] = off;
  6:         off += alignedSize(a.type);              // 按 8 字节对齐累加
  7:     end for
- 8:     // 2. 保存返回地址与帧指针
+ 8:     // 2. 保存返回地址
  9:     frame.ra_offset = off;  off += 8;
-10:     frame.fp_offset = off;  off += 8;
-11:     // 3. 保存被调用者保存寄存器（用到才保存）
-12:     for each reg in usedCalleeSaved(func) do
+10:     // 3. 保存被调用者保存寄存器；s0 作为帧指针时也必须保存
+11:     saved = uniqueSorted(usedCalleeSaved(func) ∪ {s0});
+12:     for each reg in saved do
 13:         frame.saved_reg_offsets[reg] = off;  off += 8;
 14:     end for
-15:     // 4. 为需要 spill 的 SSA 值分配槽（寄存器分配阶段填入）
-16:     for each v in func.spilled_values do
-17:         frame.slot_offsets[v] = off;  off += 8;
-18:     end for
-19:     // 5. 栈帧大小按 16 字节对齐
-20:     frame.frame_size = align16(off);
-21:     return frame;
+15:     frame.fp_offset = frame.saved_reg_offsets[s0];
+16:     // 4. 为需要 spill 的 SSA 值分配固定槽位
+17:     for each v in func.spilled_values do
+18:         frame.slot_offsets[v] = off;  off += 8;
+19:     end for
+20:     // 5. 栈帧大小按 16 字节对齐
+21:     frame.frame_size = align16(off);
+22:     return frame;
 ```
 
 ### 4.3 序言和尾声
@@ -446,16 +450,42 @@ declare void @putint(i32)
  4:     emit(func.name + ":");
  5:     emit("  addi sp, sp, -" + frame.frame_size);   // 开栈帧
  6:     emit("  sd   ra, " + frame.ra_offset + "(sp)"); // 保存返回地址
- 7:     emit("  sd   s0, " + frame.fp_offset + "(sp)"); // 保存旧帧指针
- 8:     emit("  add  s0, sp, zero");                    // fp = sp
- 9:
-10: emitEpilogue(func, frame):
-11:     emit(func.name + "_epilogue:");
-12:     emit("  ld   ra, " + frame.ra_offset + "(sp)"); // 恢复返回地址
-13:     emit("  ld   s0, " + frame.fp_offset + "(sp)"); // 恢复帧指针
-14:     emit("  addi sp, sp, " + frame.frame_size);     // 关栈帧
-15:     emit("  ret");
+ 7:     for each reg in frame.saved_reg_offsets do
+ 8:         emit("  sd   " + reg + ", " + frame.saved_reg_offsets[reg] + "(sp)");
+ 9:     end for
+10:     emit("  add  s0, sp, zero");                    // fp = 当前栈帧基址
+11:
+12: emitEpilogue(func, frame):
+13:     emit(func.name + "_epilogue:");
+14:     for each reg in reverse(frame.saved_reg_offsets) do
+15:         emit("  ld   " + reg + ", " + frame.saved_reg_offsets[reg] + "(sp)");
+16:     end for
+17:     emit("  ld   ra, " + frame.ra_offset + "(sp)"); // 恢复返回地址
+18:     emit("  addi sp, sp, " + frame.frame_size);       // 关栈帧
+19:     emit("  ret");
 ```
+
+序言必须保存 `ra` 和所有实际使用的被调用者保存寄存器（`s0–s11` 中的对应寄存器），尾声按相同槽位恢复后才能返回。只保存 `s0` 而在函数体内使用 `s1–s11` 会破坏调用者状态，属于错误实现。
+
+### 4.4 溢出值的读写与调用点保存
+
+寄存器分配结果应为每个 SSA 值记录 `Register` 或 `StackSlot` 两类位置。值落在 spill 槽时，定义和使用必须显式插入内存访问：
+
+```
+resolve(v):
+    if location[v] is Register r then return r
+    tmp = acquireScratchRegister()
+    emit("lw " + tmp + ", " + frame.slot_offsets[v] + "(s0)")
+    return tmp
+
+define(v, r):
+    if location[v] is StackSlot then
+        emit("sw " + r + ", " + frame.slot_offsets[v] + "(s0)")
+    else
+        move(location[v], r)
+```
+
+在 `call` 前还要保存仍然活跃、但位于 caller-saved 寄存器中的值；调用返回后再加载它们。`a0–a7` 用于本次调用的参数，不能假定调用会替调用者保留；`t0–t6`、`a0–a7` 等 caller-saved 寄存器中的活跃值必须由调用者保存，或预先分配到 spill 槽。若采用“每个 SSA 值都在栈槽”的保守基线，则这些值已经有固定槽位，重点是保证每次读写和调用点保存都生成正确的 `lw` / `sw`。
 
 ## 五、常量与数据段
 
@@ -628,7 +658,7 @@ int main() {
 汇编的具体写法由你自己决定：用哪些寄存器、栈帧开多大、标号怎么起名都可以不同，
 只要能通过 `riscv64-unknown-elf-gcc` 汇编链接、运行结果与源程序语义一致即可。
 下面给出一份基线输出（不做优化，中间结果用 `t0`/`t1` 传递，每个局部变量占一个栈槽、用 `s0` 作帧指针访问），
-可以直接对照第 2、4 节的算法阅读：
+可以直接对照第 2、4 节的算法阅读。样例函数只使用了 `s0`，因此没有额外的 `s1–s11` 保存指令；如果寄存器分配使用了其它被调用者保存寄存器，或有值溢出到 spill 槽，应按 4.3、4.4 节同步扩展序言、尾声和读写指令：
 
 ```asm
 .text
@@ -834,14 +864,7 @@ main_epilogue:
 
 ## 七、错误处理与退出码
 
-基线后端在遇到错误时必须给出明确的错误信息并正常退出，不允许崩溃：
-
-| 错误类型 | 处理方式 |
-| --- | --- |
-| 未识别的 opcode | 向 stderr 输出 `error: unsupported instruction`，退出码 1 |
-| 调用未声明函数 | 向 stderr 输出 `error: undefined function: <name>`，退出码 1 |
-| 引用未声明变量 | 向 stderr 输出 `error: undefined variable: <name>`，退出码 1 |
-| 除零 | 由 RISC-V 硬件 trap 或运行时库处理 |
+基线后端在遇到错误时必须给出足够的上下文并正常退出，不允许崩溃。课程不规定错误文本的固定格式；实现至少应说明错误所在阶段、相关指令或名称以及可定位的原因，并将诊断信息与正常汇编输出分开。未识别的 IR 指令、未声明的函数或变量等情况应终止当前编译并返回非零状态；除零行为按 ToyC 的语言约定处理。
 
 ## 八、命令行与提交物
 
