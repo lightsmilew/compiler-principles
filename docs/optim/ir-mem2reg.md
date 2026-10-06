@@ -360,10 +360,12 @@ flowchart TB
 
 ## 九、动手验证
 
+`-ir` 不是必要接口，评测脚本不会调用；若实现了该本地调试接口，可打印 mem2reg 前后的 IR，再检查：
+
 ```bash
-# 分别打印优化前后的 IR
-./compiler -ir        < test.c > before.ll
-./compiler -ir -opt  < test.c > after.ll
+# 可选：分别打印优化前后的 IR
+./compiler -ir < test.c > before.ll
+./compiler -ir -opt < test.c > after.ll
 
 # 关注三个指标：alloca 条数、load/store 条数、phi 条数
 grep -c 'alloca'  before.ll   after.ll

@@ -139,11 +139,11 @@ const config: Config = {
           items: [
             {
               label: 'Compilers: Principles, Techniques, and Tools',
-              href: 'https://www.pearson.com/en-us/subject-catalog/p/compilers-principles-techniques-and-tools/P200000003472/9780133002140',
+              href: 'https://github.com/pengbo-learn/books/blob/master/Compilers%20-%20Principles%2C%20Techniques%20and%20Tools%202nd%20%28Aho-2007%29.pdf',
             },
             {
               label: 'Modern Compiler Implementation in C',
-              href: 'https://www.cs.princeton.edu/~appel/modern/c/',
+              href: 'https://github.com/ethanhe42/Modern-Compiler-Implementation-in-C/blob/master/Modern%20Compiler%20Implementation%20in%20C.pdf',
             },
           ],
         },

@@ -88,19 +88,24 @@ static final int MAX_LEN = 64;  // 常量 UPPER_SNAKE_CASE
 
 ### 可测试性
 
-统一驱动使用 `-token`、`-ast`、`-ir`、`-asm` 选项，从标准输入读取 ToyC 源程序、向标准输出写入阶段结果，测试时用重定向保存到文件：
+统一驱动必须支持 `-token`、`-ast`、`-asm` 和优化开关 `-opt`，从标准输入读取 ToyC 源程序、向标准输出写入阶段结果，测试时用重定向保存到文件：
 
 ```bash
 ./compiler -token   < input.c > input.token      # 第一部分：Token 流
 ./compiler -ast     < input.c > input.check-ast  # 第二部分：语法检查，输出 accept / reject
-./compiler -ir       < input.c > input.ll         # 第三部分：LLVM IR
-./compiler -ir -opt < input.c > input.opt.ll     # 第三部分：优化后 LLVM IR
-./compiler -asm      < input.c > input.s          # 第四部分：基线汇编
-./compiler -asm -opt < input.c > input.opt.s     # 第五、六部分：优化汇编
+./compiler -asm     < input.c > input.s          # 功能样例：不带 -opt
+./compiler -asm -opt < input.c > input.opt.s     # 性能样例：启用优化
 
 ```
 
-这些阶段选项用于检查中间结果；最终评测重点是 `-asm` 产生的 RV64GC 汇编及其运行结果。
+功能样例不传入 `-opt`，性能样例使用 `-asm -opt` 组合调用。编译器必须支持 `-opt`，暂未实现优化时也必须静默接受它；最终评测重点是汇编及其运行结果。
+
+`-ir` 不是必要接口，评测脚本不会调用。若实现了本地 IR 调试输出，可使用以下组合观察中间结果：
+
+```bash
+./compiler -ir < input.c > input.ll          # 可选：LLVM IR
+./compiler -ir -opt < input.c > input.opt.ll  # 可选：优化后的 LLVM IR
+```
 
 ## 四、验收方式
 

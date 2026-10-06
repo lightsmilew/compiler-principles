@@ -338,18 +338,20 @@ flowchart TB
 
 ## 四、验证命令
 
+功能样例评测调用 `-asm`，不带 `-opt`；性能样例评测调用 `-asm -opt`，编译器必须支持该优化开关。`-ir` 不是必要接口，评测脚本不会调用；若实现了本地调试接口，可额外导出优化前后的 IR：
+
 ```bash
 cmake -S . -B build
 cmake --build build
-./compiler -ir < input.c > input.ll
-./compiler -ir -opt < input.c > input.opt.ll
+./compiler -ir < input.c > input.ll           # 可选调试接口
+./compiler -ir -opt < input.c > input.opt.ll   # 可选调试接口的组合调用
 ./compiler -asm < input.c > input.s
 ./compiler -asm -opt < input.c > input.opt.s
 ```
 
-分别链接并运行两个版本，比较输出和退出码；同时报告 IR 指令数、基本块数和优化前后差异。
+分别链接并运行两个汇编版本，比较输出和退出码；调试时可观察 IR 指令数、基本块数和优化前后差异。
 
-几条值得单独统计的指标：
+如果导出了优化前后的 IR，可单独统计以下指标：
 
 ```bash
 grep -c 'alloca'          input.ll         input.opt.ll   # mem2reg 是否生效
@@ -366,8 +368,7 @@ grep -cE '\bcall\b'      input.ll        input.opt.ll   # 内联是否减少了�
 toyc-cpp/           # 仓库目录名由你决定，此处以 toyc-cpp 为例
 ├── CMakeLists.txt
 ├── src/
-├── third_party/toyc/libtoyc.a
-├── README.md       # 简要说明编译器架构
+└── README.md       # 简要说明编译器架构
 ```
 
 `README.md` 需要说明本阶段实现的优化内容与实现思路。

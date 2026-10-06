@@ -101,6 +101,10 @@ npm run typecheck      # TypeScript 类型检查
 npm run clear          # 清缓存（遇到奇怪问题时再跑）
 ```
 
+## ToyC 运行时库
+
+网站下载资源 `static/downloads/libtoyc.a` 的独立源码与构建验证步骤见 [ToyC 运行时库源码](runtime/README.md)。更新运行时后，请先重新编译并完成 QEMU 验证，再构建站点。
+
 ## ✍️ 新增一篇实验文档
 
 侧边栏和导航**完全由 `docs/` 目录 + Markdown 文件头自动生成**，

@@ -106,26 +106,28 @@ IR 层的 SSA 值是无限的，到了汇编层才有"寄存器压力"的概念�
 10:     return G;                                        // move 相关边在合并阶段再处理
 ```
 
-下面这张图把上面汇编示例的活跃区间、它们彼此重叠的位置，以及由此导出的冲突图一次性画出来：
+示例中 `t1` 在第 4 条指令仍被使用，因此它的活跃区间是 `[1, 5)`。只观察 `t0₀`、`t1`、`t0₁` 这三个值版本，它们在各指令位置的活跃情况如下（● 表示活跃）：
+
+| 值版本 / 活跃区间 | 0 | 1 | 2 | 3 | 4 |
+| --- | --- | --- | --- | --- | --- |
+| `t0₀ [0, 2)` | ● | ● | — | — | — |
+| `t1 [1, 5)` | — | ● | ● | ● | ● |
+| `t0₁ [3, 5)` | — | — | — | ● | ● |
+
+冲突图的每条红色无向边都标出了重叠区间：相连的值必须使用不同寄存器。
 
 ```mermaid
-%% 每个值版本使用独立节点，避免把同名寄存器的两段区间误合并。
-flowchart TB
-  subgraph 冲突图
-    A[t0₀] --- B[t1]
-    B --- C[t0₁]
-  end
-  subgraph 活跃区间
-    R0["t0₀：0 到 2"] ~~~ R1["t1：1 到 4"]
-    R1 ~~~ R2["t0₁：3 到 5"]
-  end
-  subgraph 程序点 0 到 4
-    P0[0: lw t0, 0 fp] --> P1[1: add t1, t0, a0]
-    P1 --> P2[2: sw t1, 4 fp]
-    P2 --> P3[3: add t0, t1, a0]
-    P3 --> P4[4: mul t2, t0, t1]
-  end
+flowchart LR
+  A(("t0₀<br/>[0, 2)")) ---|"重叠 [1, 2)<br/>不能共用寄存器"| B(("t1<br/>[1, 5)"))
+  B ---|"重叠 [3, 5)<br/>不能共用寄存器"| C(("t0₁<br/>[3, 5)"))
+  classDef reusable fill:#e6efeb,stroke:#0e4834,color:#08291d,stroke-width:2px;
+  classDef conflicting fill:#fde8e8,stroke:#b42318,color:#7a271a,stroke-width:2px;
+  class A,C reusable;
+  class B conflicting;
+  linkStyle 0,1 stroke:#b42318,stroke-width:3px;
 ```
+
+`t0₀` 与 `t0₁` 之间没有边，因为两段区间不重叠，可以复用同一个物理寄存器（图中同为绿色）；`t1` 与二者均冲突，必须使用另一个寄存器。`a0` 和 `fp` 的固定寄存器约束在分配时另行处理。
 
 ## 四、特殊约束：调用约定
 
@@ -134,6 +136,7 @@ flowchart TB
 | 类型 | 行为 |
 | --- | --- |
 | 调用者保存 `t0~t6` | 调用前后值不保留，被调函数可任意修改 |
+| 返回地址 `ra`（`x1`，调用者保存） | `call` / `jal` 会覆盖它；非叶函数须在再次调用前保存自己的返回地址，并在返回前恢复，不作为普通临时值的分配目标 |
 | 被调用者保存 `s0~s11` | 被调函数必须保留，跨调用活跃的值可以放在这里 |
 | 参数寄存器 `a0~a7` | 函数入口接收参数，前几条指令活跃；之后可作为临时 |
 | 返回值寄存器 `a0, a1` | 函数出口返回结果 |
@@ -143,11 +146,13 @@ flowchart TB
 ```cpp
 bool is_allocatable(int phys_reg) {
     return phys_reg != SP && phys_reg != GP && phys_reg != TP
-        && phys_reg != ZERO && phys_reg != FP;
+        && phys_reg != ZERO && phys_reg != FP && phys_reg != RA;
 }
 ```
 
 如果一个值跨越函数调用还活跃，它要么用被调用者保存寄存器（首选），要么在调用前后保存/恢复。
+
+寄存器保存规则参见 [RISC-V psABI 的整数寄存器约定](https://riscv-non-isa.github.io/riscv-elf-psabi-doc/#_integer_register_convention)。
 
 ## 五、move-aware 冲突图
 

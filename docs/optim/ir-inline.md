@@ -20,7 +20,7 @@ ToyC 中的函数调用在 IR 上看只是一条 `call`，但落到 RISC-V 上�
 | 栈帧 | 保存返回地址、调整 `sp`，必要时保存被调用者保存寄存器 |
 | 返回 | 返回值从 `a0` 搬回调用点 |
 
-当被调函数只有两三条指令时，调用开销可能大于函数体本身。除此之外，调用还会阻断多项优化：
+当被调函数只有两三条指令时，调用开销可能大于函数体本身。对于只做函数内分析、没有跨过程摘要的优化器，调用还会遮住多项优化需要的信息：
 
 - 常量传不进去：`square(2)` 在调用点看是一次调用，在函数体内看是形参 `x`，常量传播无法跨过 `call`；
 - 结果传不出来：函数体内的 `x * x` 与调用点得到的返回值，在 IR 上是两个互不相关的值；
@@ -42,14 +42,14 @@ int main() {
 }
 ```
 
-把 `square` 内联之后，`square(i)` 变成 `i * i`，上面四个障碍同时消失。
+把 `square` 内联之后，循环中的调用变成 `i * i`，消除了这次调用的传参与跳转，并把乘法交给调用者内部的优化器。这里的 `i` 会变化，不能直接折叠成常量；常量实参的收益可以用 `square(2)` 单独说明：
 
 ```mermaid
-flowchart TB
-  A["调用点：call square(i)"] --> B["内联：把函数体展开到调用点"]
-  B --> C["i * i 出现在调用点"]
-  C --> D["常量传播 / CSE / DCE<br/>可以跨过原来的函数边界"]
+flowchart LR
+  A["内联前<br/>调用 square(2)<br/>函数体计算 x × x"] -->|"内联<br/>x → 2"| B["内联后<br/>调用点计算 2 × 2<br/>常量折叠得到 4"]
 ```
+
+箭头表示一次代码变换，两个框比较同一调用点的前后状态。内联先得到 `2 * 2`，后续常量折叠再得到 `4`；不是所有内联都能折叠为常量。
 
 ## 二、内联需要完成的工作
 
@@ -93,36 +93,31 @@ entry:
 }
 ```
 
-内联后（只剩一个函数）：
+内联后（在 `main` 中展开这一次调用，下面只展示修改后的 `main`）：
 
 ```llvm
-define i32 @square(i32 %x) { ... }    ; 原函数保留，其它调用点仍会用到
-
 define i32 @main() {
 entry:
     %i = call i32 @getint()
     %a = add i32 %i, 1
-    %t1 = mul i32 %a, %a              ; square 的函数体，%x 被替换为 %a
-    %r = %t1                          ; 返回值即 %t1
-    call void @putint(i32 %r)
+    %sq.t = mul i32 %a, %a             ; 复制 %t，并用实参 %a 替换形参 %x
+    call void @putint(i32 %sq.t)       ; 原先使用 %r 的位置改用返回值 %sq.t
     ret i32 0
 }
 ```
 
-内联之后 `%a` 与 `%t1` 位于同一个函数，常量传播与 CSE 可以继续处理。若 `%a` 恰好是常量，下一步就能把 `%t1` 折叠为常量。
+`%a` 仍是 `i + 1`，所以展开后计算的是 `(i + 1) * (i + 1)`。局部值 `%t` 重命名为 `%sq.t`，原调用结果 `%r` 的使用直接替换为 `%sq.t`，不需要额外的 SSA“赋值指令”。原来的 `square` 定义可暂时保留；是否删除它，要另行检查还有没有其它调用或引用。
 
 ```mermaid
-flowchart TB
-  subgraph 内联前
-    M1["main"] --> C1["call square"]
-    C1 --> S1["square 函数体"]
-    S1 --> B1["返回 main"]
-  end
-  subgraph 内联后
-    M2["main（函数体已展开）"] --> S2["i * i 就在调用点"]
-    S2 --> B2["继续 putint"]
-  end
+flowchart LR
+  A["内联前：main<br/>%r = square(%a)<br/>putint(%r)"] -->|内联| B["内联后：main<br/>%sq.t = %a × %a<br/>putint(%sq.t)"]
+  classDef before fill:#eef4fb,stroke:#4a90c2,color:#12324a;
+  classDef after fill:#e6efeb,stroke:#0e4834,color:#08291d;
+  class A before;
+  class B after;
 ```
+
+图中只比较调用点；`getint` 与 `putint` 都仍然是外部调用。被复制的乘法来自 `square`，展开后与 `%a` 的定义位于同一函数，常量传播、CSE 等函数内优化才能直接观察这条依赖链。
 
 ## 四、算法
 
@@ -220,9 +215,11 @@ flowchart TB
 
 ## 七、动手验证
 
+`-ir` 不是必要接口，评测脚本不会调用；若实现了该本地调试接口，可额外导出内联后的 IR：
+
 ```bash
 # 内联与其它优化之后的 IR / 汇编
-./compiler -ir  -opt < test.c > after.ll
+./compiler -ir -opt < test.c > after.ll   # 可选调试接口的组合调用
 ./compiler -asm -opt < test.c > after.s
 
 # 1. call 条数是否下降（I/O 调用的 call 会保留）
