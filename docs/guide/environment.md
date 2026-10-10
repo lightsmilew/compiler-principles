@@ -43,12 +43,9 @@ sudo apt install -y default-jdk cmake build-essential
 java -version   # 确认出现版本号
 ```
 
-下载 ANTLR jar 包并配置命令行别名：
+先创建 `$HOME/.local/share/antlr/` 目录，再通过 [ANTLR 4.13.1 jar 包下载链接](https://www.antlr.org/download/antlr-4.13.1-complete.jar) 下载文件并放入该目录，然后配置命令行别名：
 
 ```bash
-mkdir -p "$HOME/.local/share/antlr"
-curl -L https://www.antlr.org/download/antlr-4.13.1-complete.jar \
-  -o "$HOME/.local/share/antlr/antlr-4.13.1-complete.jar"
 cat >> "$HOME/.bashrc" <<'EOF'
 export ANTLR_JAR="$HOME/.local/share/antlr/antlr-4.13.1-complete.jar"
 alias antlr4='java -jar "$ANTLR_JAR"'
@@ -412,14 +409,21 @@ ToyC编译器在 Linux 环境下构建和测试。Windows 10/11 用户推荐使�
 在管理员 PowerShell 中执行：
 
 ```powershell
-wsl --install -d Ubuntu-24.04
+wsl --install --web-download -d Ubuntu-24.04
 ```
 
-重启后首次打开 Ubuntu，设置 Linux 用户名和密码，然后在 WSL 中确认版本：
+`--web-download` 使用在线来源下载，避免通过 Microsoft Store 下载发行版。参数说明见[微软 WSL 安装文档](https://learn.microsoft.com/en-us/windows/wsl/basic-commands#install)。
+
+重启后首次打开 Ubuntu，设置 Linux 用户名和密码。先在 PowerShell 中检查 WSL 状态：
+
+```powershell
+wsl --status
+```
+
+再在 Ubuntu 终端中更新软件包并检查内核：
 
 ```bash
 sudo apt update && sudo apt upgrade -y
-wsl --status
 uname -a
 ```
 
@@ -439,18 +443,23 @@ git remote add <给你的远程仓库命名> <url>
 
 ### 2. Java 环境（JDK 21 / Maven / Gradle）
 
+通过以下链接下载所需的安装包：
+
+- [下载 Maven 3.9.11](https://archive.apache.org/dist/maven/maven-3/3.9.11/binaries/apache-maven-3.9.11-bin.tar.gz)
+- [下载 Gradle 8.5](https://services.gradle.org/distributions/gradle-8.5-bin.zip)
+
+将安装包放到 WSL 可访问的目录，在 Ubuntu 终端中进入该目录后执行以下安装与配置命令：
+
 ```bash
-sudo apt install -y openjdk-21-jdk curl unzip
+sudo apt install -y openjdk-21-jdk unzip
 
 # Maven 3.9.11
-curl -LO https://archive.apache.org/dist/maven/maven-3/3.9.11/binaries/apache-maven-3.9.11-bin.tar.gz
 sudo tar -xzf apache-maven-3.9.11-bin.tar.gz -C /opt
 sudo ln -sfn /opt/apache-maven-3.9.11 /opt/maven
 echo 'export MAVEN_HOME=/opt/maven' >> "$HOME/.bashrc"
 echo 'export PATH="$MAVEN_HOME/bin:$PATH"' >> "$HOME/.bashrc"
 
 # Gradle 8.5
-curl -LO https://services.gradle.org/distributions/gradle-8.5-bin.zip
 sudo unzip -q gradle-8.5-bin.zip -d /opt
 sudo ln -sfn /opt/gradle-8.5 /opt/gradle
 echo 'export PATH="/opt/gradle/bin:$PATH"' >> "$HOME/.bashrc"
@@ -463,9 +472,11 @@ gradle --version
 
 ### 3. Rust 环境（Cargo）
 
+通过 [Rust 官方安装脚本下载链接](https://sh.rustup.rs) 下载脚本，保存为 `rustup-init.sh`。在 Ubuntu 终端中进入脚本所在目录后执行：
+
 ```bash
 # 安装 Rust 工具链（包含 Cargo 1.85.0）
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+sh ./rustup-init.sh -y --default-toolchain 1.85.0
 source "$HOME/.cargo/env"
 
 # 验证安装
@@ -647,22 +658,8 @@ toyc-cpp/                    # 仓库目录名由你决定，此处以 toyc-cpp 
 - [下载 SysY2022 语言定义](pathname:///pdf/SysY2022语言定义-V1.pdf) — 编译系统赛的官方语言规范（基本数据类型、语句、函数等）
 - [下载 SysY2022 运行时库](pathname:///pdf/SysY2022运行时库-V1.pdf) — `getint`、`putint` 等运行时函数的接口说明
 - [下载 SysY2026 扩展规范](pathname:///pdf/Sysy2026.pdf) — 张量（tensor）类型与矩阵乘法运算符 `@`
-下载后放到 `third_party/docs/` 目录下便于随时查阅：
+下载后可集中放到 `third_party/docs/` 目录下，便于随时查阅。
 
-```bash
-mkdir -p third_party/docs
-# SITE_BASE_URL 是站点根 URL，未设置时使用本地开发服务器
-# 部署到 GitHub Pages 后设置为 https://<username>.github.io
-# 目前根 URL 为 https://lightsmilew.github.io
-curl -L -o third_party/docs/QEMU本地调试指南.pdf \
-    "${SITE_BASE_URL:-http://localhost:3000}/compiler-principles/pdf/QEMU本地调试指南.pdf"
-curl -L -o third_party/docs/SysY2022语言定义-V1.pdf \
-    "${SITE_BASE_URL:-http://localhost:3000}/compiler-principles/pdf/SysY2022语言定义-V1.pdf"
-curl -L -o third_party/docs/SysY2022运行时库-V1.pdf \
-    "${SITE_BASE_URL:-http://localhost:3000}/compiler-principles/pdf/SysY2022运行时库-V1.pdf"
-curl -L -o third_party/docs/Sysy2026.pdf \
-    "${SITE_BASE_URL:-http://localhost:3000}/compiler-principles/pdf/Sysy2026.pdf"
-```
 :::note[SysY 语言定义]
 SysY2022 与 SysY2026 语言定义仅供同学们参考，不做要求。
 :::
