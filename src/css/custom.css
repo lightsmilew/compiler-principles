@@ -606,13 +606,14 @@ div[class^='codeBlockContainer'] {
   --doc-sidebar-width: 18rem;
 }
 
+/* 桌面侧栏沿用 Docusaurus 的吸顶和滚动布局，避免重复预留导航栏高度。 */
 .theme-doc-sidebar-container {
   border-right: 1px solid var(--cc-border) !important;
   background: var(--cc-bg-subtle);
 }
 
 .theme-doc-sidebar-menu {
-  padding: 1rem 0.75rem 2rem;
+  padding: 0.5rem 0.75rem 2rem;
 }
 
 .menu__link {
@@ -696,17 +697,6 @@ div[class^='codeBlockContainer'] {
 
 .navbar-sidebar .menu__list {
   padding-inline: 0.75rem;
-}
-
-@media (min-width: 997px) {
-  .theme-doc-sidebar-container {
-    position: sticky;
-    top: var(--ifm-navbar-height);
-    height: calc(100vh - var(--ifm-navbar-height));
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--cc-border-strong) transparent;
-  }
 }
 
 .table-of-contents__link {
