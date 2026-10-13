@@ -560,10 +560,10 @@ cmake --build build
 ```
 
 ```text
-toyc-cpp/           # 仓库目录名由你决定，此处以 toyc-cpp 为例
+toyc-cpp/           # 仓库目录名可自行设置，此处以 toyc-cpp 为例
 ├── CMakeLists.txt   # 或 Makefile / pom.xml / Cargo.toml
 ├── src/
-└── README.md       # 简要说明你的词法分析器实现思路
+└── README.md       # 简要说明词法分析器的实现思路
 ```
 
 报告中应包含：正则规则、DFA 状态图（或构造过程）、Token 数据结构和错误恢复策略。测试用例与测试输出由评测平台提供，无需作为额外提交物。

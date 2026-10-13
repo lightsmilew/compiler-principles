@@ -18,7 +18,7 @@ ToyC 编译器全程禁止引入任何第三方运行时库，包括 LLVM、MLIR
 LLVM IR 是一种强类型 SSA 三地址码：每条指令最多一个算术结果，可以有 0 个或多个操作数；它同时是编译器内部表示和文本格式（`.ll`），用 `llvm-as` / `llvm-dis` 可以双向转换。
 
 :::info
-LLVM IR 仅作为 ToyC IR 设计的参考架构，课程项目禁止集成 LLVM 库。学生应参考 LLVM IR 的 SSA 组织形式、`phi` 节点语义、内存模型（alloca/load/store）和 calling convention，自行决定三地址码的结构。
+LLVM IR 仅作为 ToyC IR 设计的参考架构，课程项目禁止集成 LLVM 库。同学们应参考 LLVM IR 的 SSA 组织形式、`phi` 节点语义、内存模型（alloca/load/store）和 calling convention，自行决定三地址码的结构。
 :::
 
 ### 1.1 层级结构
@@ -111,7 +111,7 @@ LLVM IR 的类型影响 lowering 和优化合法性：
 | 结构 | `{ i32, float }` | 字面顺序的字段集合 |
 | 函数 | `i32 (i32, i32)*` | 函数指针类型 |
 
-举例：`getelementptr [10 x i32], ptr %arr, i64 0, i64 %i` 会算 `&arr[i]`，但不读内存；后续 `load i32, ptr %p` 才真正访问内存。这种"GEP 只算地址、load/store 才访问"的两阶段设计是 LLVM 内存模型的精髓，也是 mem2reg 等优化能工作的基础。
+例如，`getelementptr [10 x i32], ptr %arr, i64 0, i64 %i` 计算 `&arr[i]`，不读取内存；后续 `load i32, ptr %p` 才读取该地址的值。IR 将地址计算与内存访问分开表示，便于分别分析指针运算和读写操作。
 
 ### 1.6 内存模型与 SSA 提升
 
@@ -222,7 +222,7 @@ loop.end:
 
 - 归纳变量用 phi 表达：`%i` 和 `%s` 在 `loop.header` 既是循环入口定义（来自 `entry`）也是循环回边定义（来自 `loop.body`）；这是 LLVM IR 表达 `for`/`while` 循环的标准模式。
 - `getelementptr` 不读内存：`%elem.ptr = getelementptr i32, ptr %A, i64 %idx` 只算地址；`load i32, ptr %elem.ptr` 才真正访问内存；中间可以插入别名分析而不影响正确性。
-- `call` 隐含 calling convention：`@abs(i32 %elem)` 默认按 C 调用约定传参；返回 `i32` 放在 `a0`（RISC-V）或 `eax`（x86）；ToyC 编译器不需要手动处理，LLVM 后端会处理。
+- `call` 遵循 calling convention：`@abs(i32 %elem)` 默认按 C 调用约定传参；返回 `i32` 放在 `a0`（RISC-V）或 `eax`（x86）。使用 LLVM 后端时由其处理；课程项目需要自行实现相应的参数传递与返回值处理。
 - `sext i32 %i to i64`：GEP 索引要求 64 位（与目标机器位宽一致），所以把 `i32` 提升为 `i64`。
 
 ### 1.8 LLVM IR 到 RISC-V 的端到端 lowering
@@ -263,11 +263,11 @@ sum_abs:
 
 优点
 
-- **SSA 形式天然支持数据流分析**：每个值只被定义一次，Use-Def / Def-Use 链是显式的，DCE、CSE、CP 等优化可以直接按算法实现，不必自行维护活跃信息。
-- **CFG 是第一公民**：基本块与前驱/后继关系由 IR 结构直接表示，循环识别、控制流简化、基本块合并等优化可以建立在块的拓扑序上。
-- **优化算法有成熟参考**：GCC/LLVM 社区对每个 pass（死代码消除、常量传播、循环不变代码外提、强度削减等）都有公开算法和论文，你们可以实现与验证课本算法。
-- **mid-end 与 back-end 解耦**：ToyC 只要输出符合规范的 LLVM IR，中端优化和后端代码生成完全交给 LLVM 完成，实验只需聚焦 IR 层面的优化。
-- **IR 足够简单适合课程**：三地址码、显式 PHI、基本类型系统，你们无需学习 MLIR 的 dialect 层次即可完成完整的中端优化链路。
+- **SSA 便于分析数据依赖**：每个值只有一个定义，可通过 Use-Def / Def-Use 链查找定义和使用位置；DCE、CSE、常量传播等优化可以据此实现。
+- **显式表示 CFG**：IR 记录基本块及其前驱、后继关系，可用于循环识别、控制流简化和基本块合并。
+- **算法参考资料**：可参考 LLVM、GCC 的实现和相关论文，理解死代码消除、常量传播、循环不变代码外提等算法，并自行实现。
+- **中端与后端分离**：中端对 IR 进行分析和优化，后端负责指令选择、寄存器分配与汇编输出；课程项目需要自行实现这两部分。
+- **适合作为 IR 设计参考**：三地址码、`phi` 节点和基本类型系统可用于自定义 IR，无需引入 MLIR 的 Dialect 层次。
 
 局限
 
@@ -457,9 +457,9 @@ affine.for %ii = 0 to 128 step 32 {
 
 **优点**
 
-1. 自动依赖分析让 tiling/interchange/fusion 等变换正确性由系统保证，学生只需写一次朴素循环就能让 pass 优化。
+1. 依赖分析可用于检查循环分块、交换与融合的合法性；满足变换条件时，相应 pass 可以优化原始循环。
 2. 多面体模型能识别 `A[i][k]` 和 `B[k][j]` 的访问模式，做出 SCF 层无法做到的 cache-friendly 重排。
-3. 与 MemRef 配合天然支持复杂数据布局（tile-aware load/store）。
+3. 可通过 MemRef 的布局描述表达分块后的数据访问。
 
 **缺点**
 
@@ -601,14 +601,14 @@ MLIR 仅作参考架构，ToyC 项目禁止集成 MLIR。下面说明多层抽�
 
 优点
 
-- 分阶段优化清晰：把 `for (i=0;i<n;i++) sum += A[i]` 一步步降级时，在 SCF 看到 LICM 把 `n` 的读取外提、IV 削减把 `A + i*4` 换成指针递推；在 Affine 中甚至能在 `n` 是仿射时直接做自动向量化。如果用一次性 lowering 到 CF，这些都要重新实现一遍。
+- 分阶段优化：保留结构化循环时，可分析循环边界和迭代变量，并在满足依赖条件时进行循环外提、强度削减等变换。降低为 CF 后，相关分析需要依据基本块与控制流重建循环信息。
 - 保留高层结构：可以定义 `toy.while` operation 让它先保留在 ToyC 方言里，到第二阶段再统一 lowering 为 `scf.while`、到第三阶段降为 CF。源语言的高层结构与后端 lowering 是解耦的。
 - 易于扩展语句：ToyC 加新语句（如 `print_arr`）只需写一个 ToyC Dialect 的新 operation 与一次 lowering pass，不用动后端。后端只看到 `func.call @toy_print_arr`，能直接复用已有 calling-convention 修复。
-- 兼容 LLVM 后端：MLIR 有一条官方 lowering 路径 `SCF/CF → LLVM Dialect → LLVM IR → RV64GC 汇编`，等于免费得到一个可用的后端。
+- 兼容 LLVM 后端：MLIR 可通过 `SCF/CF → LLVM Dialect → LLVM IR` 逐步降低，再由 LLVM 后端生成目标代码。课程项目仅参考这一结构，不调用 LLVM 或 MLIR 完成代码生成。
 
 局限
 
-- 项目规模过小时性价比低：ToyC 如果只是 `int main(){return 0;}`，为这一句话写一个完整 Dialect + conversion framework 比直接写自定义三地址码慢一个数量级。
+- 小型项目的实现成本：为简单语言建立完整的 Dialect 和转换框架，需要额外定义操作、类型和转换规则；自定义三地址码通常更容易实现和调试。
 - IR 合法性约束强：每个 lowering 阶段都必须保持 IR 合法。例如把 SCF 降为 CF 时必须把 `iter_args` 显式转换为基本块参数并正确计算支配关系，否则 verify 失败；如果手工写错一处，会出现难以定位的崩溃。
 - 跨方言转换不自动：`Affine → SCF` 容易（依赖分析能跑），但 `SCF → CF` 涉及循环结构识别与 PHI 插入，实现难度较大。
 - 构建成本高：MLIR 通常作为 LLVM 项目的一部分构建，体量几十 GB；用 `apt` 安装的发行版二进制往往版本对不上，建议用源码构建或预编译的 release。

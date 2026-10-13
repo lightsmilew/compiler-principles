@@ -46,14 +46,14 @@ int main() {
 
 ```bash
 # 1. 编译 ToyC 源代码 → 汇编
-./compiler < input.c > input.s
+./compiler -asm < input.c > input.s
 
 # 2. 链接汇编 + 运行时库 → 可执行文件
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
   -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
 
 # 3. 运行（qemu-user）
-./input < input.in
+qemu-riscv64 ./input < input.in
 ```
 
 **方式二：qemu-system 完整虚拟机**

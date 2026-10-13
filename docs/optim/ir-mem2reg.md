@@ -2,7 +2,7 @@
 sidebar_position: 2
 sidebar_label: mem2reg
 title: mem2reg：把内存访问提升为 SSA
-description: 把栈上的局部变量提升为 SSA 值，接通 Use-Def 链，为后续优化和寄存器分配做准备
+description: 将栈上的局部变量提升为 SSA 值，建立 Use-Def 链，支持后续优化和寄存器分配
 ---
 
 # mem2reg：把内存访问提升为 SSA

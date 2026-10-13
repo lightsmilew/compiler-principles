@@ -365,7 +365,7 @@ grep -cE '\bcall\b'      input.ll        input.opt.ll   # 内联是否减少了�
 第五部分必须提交可编译的完整优化器文件：
 
 ```text
-toyc-cpp/           # 仓库目录名由你决定，此处以 toyc-cpp 为例
+toyc-cpp/           # 仓库目录名可自行设置，此处以 toyc-cpp 为例
 ├── CMakeLists.txt
 ├── src/
 └── README.md       # 简要说明编译器架构

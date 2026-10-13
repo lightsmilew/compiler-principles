@@ -2,35 +2,24 @@
 sidebar_position: 1
 sidebar_label: 课程总览
 title: 课程总览
-description: 课程总览 + 综合课程设计：实验路线、考核方式、设计目标、交付物、验收流程与时间安排
+description: 实验安排、考核方式、综合设计目标、提交要求与时间安排
 ---
+
+import CourseMap, {CompilerPipeline} from '@site/src/components/CourseMap';
 
 # 课程总览
 
-本页概述课程实验路线与考核方式，并说明综合课程设计的目标、交付物、验收流程和时间安排。
-课程阶段安排、综合设计的提交要求、时间节点与评分依据均在下文列出，供课程实施与提交时查阅。
+本课程包括六个实验部分与综合课程设计。各部分共用一个编译器项目，完成实验后提交统一报告和汇报材料。
 
 ## 一、课程总览
 
-本课程以一个 ToyC 编译器为主线，分六个部分带你从零实现一个完整的编译流程。
-各部分的程序产出或设计方案共同构成编译器流水线，最终你会得到一个能把 ToyC 源码
-翻译为汇编指令的编译器。
+本课程围绕 ToyC 编译器设置六个实验部分，覆盖词法分析、语法分析、中间代码生成、目标代码生成与优化。各部分共用一个项目，将 ToyC 源程序编译为 RV64GC 汇编。
 
 
 
 ### 实验路线
 
-```mermaid
-flowchart TB
-  A[第一部分<br/>词法分析] --> B[第二部分<br/>语法分析]
-  B --> S[选做<br/>语义分析]
-  S --> C[第三部分<br/>中间代码生成]
-  C --> D[第四部分<br/>目标代码生成]
-  D --> E[第五部分<br/>中间代码优化]
-  E --> F[第六部分<br/>目标代码优化]
-  F --> G[(综合课程设计)]
-  style G fill:#2563eb,color:#fff
-```
+<CourseMap />
 
 ### 实验一览
 
@@ -46,9 +35,9 @@ flowchart TB
 
 ### 如何开始
 
-1. 阅读 [开发环境与工具链](../guide/environment)，把环境跑起来；
+1. 按照 [开发环境与工具链](../guide/environment) 安装工具并完成验证；
 2. 阅读 [实验流程与代码规范](../guide/workflow)，了解提交与评分规则；
-3. 从 [第一部分：词法分析](./part1-lexer) 开始动手。
+3. 完成 [第一部分：词法分析](./part1-lexer)，再按实验编号继续实现。
 
 遇到问题先看 [常见问题 FAQ](../reference/faq)，仍未解决再向助教提问。
 
@@ -78,17 +67,9 @@ pie showData
 
 将六个部分的产物整合为完整、可独立运行的编译器，从 ToyC 源程序生成 RISC-V64GC 汇编，并通过平台评测验证功能正确性与性能。
 
-```mermaid
-flowchart TB
-  SRC["源程序<br/>.mc"] --> L1[实验一<br/>词法]
-  L1 --> L2[实验二/三<br/>语法]
-  L2 --> L4[选做<br/>语义]
-  L4 --> L5[第三部分<br/>LLVM IR]
-  L5 --> L6[第四部分<br/>目标代码]
-  L6 --> L7[第五部分<br/>IR 优化]
-  L7 --> L8[第六部分<br/>目标代码优化]
-  L8 --> BIN["RV64GC 汇编 / 可执行文件"]
-```
+实验按编号依次完成，整合后的编译器按下面的顺序处理源程序。第三部分生成的 IR 可以经过第五部分优化，再交给第四部分生成目标代码。
+
+<CompilerPipeline />
 
 ## 四、交付物
 
@@ -106,7 +87,7 @@ flowchart TB
 
 ## 五、测试文件命名约定
 
-评测时助教提供的测试文件按以下约定命名，学生在自己的验证命令中也应遵循同样格式：
+评测时助教提供的测试文件按以下约定命名，同学们在自己的验证命令中也应遵循同样格式：
 
 | 阶段 | 编译器输入 | 程序运行时输入 | 链接产物 | 程序输出 |
 |---|---|---|---|---|
@@ -116,9 +97,9 @@ flowchart TB
 | 第四部分（汇编） | `*.c` | `*.in` | `input`（无后缀） | `*.out` |
 
 :::info[关于源文件命名]
-ToyC 源文件统一使用 `.c` 后缀（与 C 语言一致，便于工具链识别）。编译流程是两步：
+ToyC 源文件统一使用 `.c` 后缀（与 C 语言一致，便于工具链识别）。编译、链接与运行流程如下：
 
-1. 你的 `./compiler` 把 `*.c` 转成 RV64GC 汇编 `*.s`；
+1. `./compiler` 将 `*.c` 转成 RV64GC 汇编 `*.s`；
 2. 用 `riscv64-unknown-elf-gcc` 链接 `*.s` 与运行时库，生成一个无后缀的可执行文件（直接叫 `input`），再用 `qemu-riscv64` 运行它；
 3. 运行结果（ToyC 程序的 stdout）重定向到 `*.out`，这是助教用来与标准答案对比的文件。
 
@@ -128,7 +109,7 @@ ToyC 源文件统一使用 `.c` 后缀（与 C 语言一致，便于工具链识
 ./compiler -asm < input.c > input.s
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
   -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
-./input < input.in > result.out        # result.out 是 ToyC 程序的 stdout，与 input.out 对比
+qemu-riscv64 ./input < input.in > result.out  # result.out 是 ToyC 程序的 stdout，与 input.out 对比
 ```
 
 **完整虚拟机开发环境**
@@ -177,7 +158,7 @@ riscv64-linux-gnu-gcc -march=rv64gc -mabi=lp64d \
 ./compiler -asm < input.c > input.s
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
   -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
-./input < input.in > result.out        # result.out 是 ToyC 程序 stdout，与 input.out 对比
+qemu-riscv64 ./input < input.in > result.out  # result.out 是 ToyC 程序 stdout，与 input.out 对比
 ```
 
 :::info
@@ -224,7 +205,7 @@ riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
 
 ```mermaid
 sequenceDiagram
-  participant S as 学生小组
+  participant S as 同学们的小组
   participant P as 希冀平台
   participant T as 助教
   S->>P: 提交仓库地址、访问令牌与可选分支名

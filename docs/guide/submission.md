@@ -14,7 +14,7 @@ description: Git 仓库可访问性、构建入口和希冀平台提交流程
 编译器项目需要上传到 GitHub、Gitee 或 GitLab 等 Git 托管平台。提交评测时，希冀平台将从指定仓库拉取代码；仓库地址、访问令牌与分支名的填写格式见[提交到希冀平台](#六提交到希冀平台)。
 
 ```text
-toyc-cpp/                        # 仓库目录名由你决定，此处以 toyc-cpp 为例
+toyc-cpp/                        # 仓库目录名可自行设置，此处以 toyc-cpp 为例
 ├── CMakeLists.txt 或 Makefile / pom.xml / build.gradle / Cargo.toml
 ├── src/                         # 编译器源代码
 └── README.md                    # 简要说明编译器架构
@@ -34,7 +34,7 @@ toyc-cpp/                        # 仓库目录名由你决定，此处以 toyc-
 ```
 
 :::info[测试文件命名约定]
-助教评测时按以下格式提供测试文件与输出文件，学生自测时也建议遵循同样命名，便于和助教脚本对比：
+助教评测时按以下格式提供测试文件与输出文件，同学们自测时也建议遵循同样命名，便于和助教脚本对比：
 
 | 阶段 | 编译器输入 | 程序运行时输入 | 链接产物 | 程序输出 |
 |---|---|---|---|---|
@@ -43,7 +43,7 @@ toyc-cpp/                        # 仓库目录名由你决定，此处以 toyc-
 | 第三部分（IR） | `*.c` | — | — | `*.ll` / `*.opt.ll` |
 | 第四部分（汇编） | `*.c` | `*.in` | `input`（无后缀 ELF） | `*.out` |
 
-**完整流程**：你的 `./compiler` 读 `*.c` → 输出汇编 `*.s` → `riscv64-unknown-elf-gcc` 链接 `*.s` 与 `libtoyc.a` → 生成可执行文件（无后缀，如 `input`）→ 运行可执行文件，把 stdout 重定向到 `*.out`，这是助教评测脚本实际比对的文件。
+**完整流程**：`./compiler` 读取 `*.c` → 输出汇编 `*.s` → `riscv64-unknown-elf-gcc` 链接 `*.s` 与 `libtoyc.a` → 生成可执行文件（无后缀，如 `input`）→ 运行可执行文件，把 stdout 重定向到 `*.out`，这是助教评测脚本实际比对的文件。
 
 `*.c` 是 ToyC 源文件，`*.in` 是 ToyC 程序运行时的标准输入数据（例如 `getint()` 读取的内容），`*.out` 是 ToyC 程序的标准输出结果（例如 `putint()` 写入的内容）。三者不要混淆。
 :::
@@ -54,27 +54,22 @@ toyc-cpp/                        # 仓库目录名由你决定，此处以 toyc-
 
 ## 五、运行时静态库
 
-`libtoyc.a` 由希冀评测平台统一提供，学生无需上传到仓库。课程组也提供本地下载链接供本地调试使用：
+`libtoyc.a` 由希冀评测平台统一提供，同学们无需上传到仓库。课程组也提供本地下载链接供本地调试使用：
 
 - [下载 ToyC RV64GC 运行时库 libtoyc.a](pathname:///downloads/libtoyc.a)
 - [运行时库接口说明](../reference/toyc-runtime)
 
-下载后放到本地工作目录，例如：
-
-```bash
-mkdir -p third_party/toyc
-curl -L -o third_party/toyc/libtoyc.a "${SITE_BASE_URL:-http://localhost:3000}/compiler-principles/downloads/libtoyc.a"
-```
+通过上方链接下载后，将库放到本地项目的 `third_party/toyc/libtoyc.a`。目录准备和运行时库验证见[开发环境与工具链](environment#六获取课程附件并验证运行时库)。
 
 链接时显式加入该文件：
 
 ```bash
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
    -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
-./input < input.in > result.out
+qemu-riscv64 ./input < input.in > result.out
 ```
 
-不要把库文件复制进学生仓库，也不要自行重新编译替换评测库。
+不要把库文件复制进同学们的项目仓库，也不要自行重新编译替换评测库。
 
 ## 六、提交到希冀平台
 

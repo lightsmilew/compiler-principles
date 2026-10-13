@@ -116,7 +116,7 @@ flowchart LR
 
 ### 2.1 特殊约束：调用约定
 
-不是所有物理寄存器都能随便用：
+寄存器分配需要遵循以下调用约定：
 
 | 类型 | 行为 |
 | --- | --- |
@@ -306,7 +306,7 @@ riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
 第六部分必须提交可编译的完整文件：
 
 ```text
-toyc-cpp/           # 仓库目录名由你决定，此处以 toyc-cpp 为例
+toyc-cpp/           # 仓库目录名可自行设置，此处以 toyc-cpp 为例
 ├── CMakeLists.txt
 ├── src/
 └── README.md       # 简要说明编译器架构
