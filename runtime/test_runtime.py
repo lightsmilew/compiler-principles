@@ -9,7 +9,7 @@ import tempfile
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--library", type=Path, default=Path("../static/downloads/libtoyc.a"))
+    parser.add_argument("--library", type=Path, default=Path(__file__).resolve().parents[1] / "static/downloads/libtoyc.a")
     parser.add_argument("--cc", default="riscv64-unknown-elf-gcc")
     parser.add_argument("--nm", default="riscv64-unknown-elf-nm")
     parser.add_argument("--readelf", default="riscv64-unknown-elf-readelf")

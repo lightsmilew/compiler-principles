@@ -30,14 +30,14 @@ flowchart TB
 对每条目标指令编号，把每次定义视为一个独立的值版本，记录该版本的定义位置和最后一次使用位置，就得到一个活跃区间（live range）：
 
 ```asm
-0: lw   t0, 0(fp)        ; 定义 v
-1: add  t1, t0, a0       ; 使用 v
-2: sw   t1, 4(fp)
-3: add  t0, t1, a0       ; t0 重新定义
-4: mul  t2, t0, t1       ; 使用新的 t0
+0:lw   t0, 0(fp)        # 定义 v
+1:add  t1, t0, a0       # 使用 v
+2:sw   t1, 4(fp)
+3:add  t0, t1, a0       # t0 重新定义
+4:mul  t2, t0, t1       # 使用新的 t0
 ```
 
-上面的 `t0` 其实有两个值版本和两段活跃区间：第一段 `[0, 2)`（值 v），第二段 `[3, 5)`；同名寄存器重新定义后，不能把两段区间合并。
+上面的 `t0` 其实有两个值版本和两段活跃区间：第一段 `[0, 2)`（值 v），第二段 `[3, 5)`；它们可分开处理；也可以保守地合并成更长区间，但会引入额外冲突，不能因此遗漏真实活跃性。
 
 **算法 1 · 构造活跃区间（Build Live Ranges）**
 
@@ -122,9 +122,9 @@ flowchart LR
 | --- | --- |
 | 调用者保存 `t0~t6` | 调用前后值不保留，被调函数可任意修改 |
 | 返回地址 `ra`（`x1`，调用者保存） | `call` / `jal` 会覆盖它；非叶函数须在再次调用前保存自己的返回地址，并在返回前恢复，不作为普通临时值的分配目标 |
-| 被调用者保存 `s0~s11` | 被调函数必须保留，跨调用活跃的值优先放这里 |
+| 被调用者保存 `s0~s11` | 当前函数使用时须保存并恢复；采用帧指针时 s0/fp 被保留 |
 | 参数寄存器 `a0~a7` | 函数入口接收参数，随后可作临时使用 |
-| 返回值寄存器 `a0, a1` | 函数出口返回结果 |
+| 返回值寄存器 `a0` | ToyC int 返回；a1 只涉及更宽或复合返回值 |
 | `zero` | 永远为 0，不能作为分配目标 |
 | `sp`, `gp`, `tp`, `fp` | 保留给栈指针等，不能分配 |
 
@@ -178,16 +178,14 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-  L[活跃变量分析] --> G[构造冲突图]
-  G --> S[简化：删度小于 K 的节点并入栈]
-  S --> C{还有可删节点?}
-  C -- 是 --> S
-  C -- 否 --> P[选 spill 候选节点]
-  P --> I[插入 load/store 后重建冲突图]
+  L[活跃变量分析] --> G[构造原始冲突图与工作副本]
+  G --> S[移除低度节点；无低度节点时选乐观候选]
+  S --> C{工作图为空?}
+  C -- 否 --> S
+  C -- 是 --> B[按原图邻居约束回填颜色]
+  B --> Q{有实际 spill?}
+  Q -- 是 --> I[统一重写 spill 并重建活跃信息]
   I --> L
-  S -.->|全部入栈| B[回填颜色]
-  B --> Q{颜色不够?}
-  Q -- 是 --> P
   Q -- 否 --> R[完成分配]
 ```
 
@@ -198,28 +196,19 @@ flowchart TD
 
 ```
  1: graphColoring(G, K):
- 2:     stack = [];
- 3:     // ---- 简化阶段：反复删除度数 < K 的节点 ----
- 4:     loop
- 5:         v = nodeWithDegreeLessThan(G, K);
- 6:         if v != none then
- 7:             stack.push(v);  G.removeNode(v);
- 8:         else
- 9:             if G not empty then
-10:                 v = chooseSpillCandidate(G);       // 例如 cost = 使用次数 / 度数，取最小
-11:                 markForSpill(v);  stack.push(v);  G.removeNode(v);
-12:             end if
-13:             break;
-14:         end if
-15:     end loop
-16:     // ---- 回填阶段：按压栈逆序分配颜色 ----
-17:     while stack not empty do
-18:         v = stack.pop();
-19:         used = colorsOfNeighbors(v);
-20:         c = firstColorNotIn(used, K);
-21:         if c != none then assign(v, c);
-22:         else markForSpill(v); end if              // 颜色不够 -> spill
-23:     end while
+ 2:     work = copyGraph(G); stack = []; spills = [];
+ 3:     while work has nodes do
+ 4:         v = nodeWithDegreeLessThan(work, K);
+ 5:         if v == none then v = chooseSpillCandidate(work); end if
+ 6:         stack.push(v); work.removeNodeAndIncidentEdges(v);
+ 7:     end while
+ 8:     while stack not empty do
+ 9:         v = stack.pop();
+10:         used = assignedColorsOfNeighbors(v, G);         // 保留的原图
+11:         c = firstAllowedColorNotIn(used, v, K);
+12:         if c != none then assign(v, c); else spills.add(v); end if
+13:     end while
+14:     return (colors, spills);
 ```
 
 若节点被标记 spill，就把它在定义处 `store` 到栈槽、在每次使用前 `load` 回来，然后重建冲突图并重新分配，直到所有节点都能着色。
@@ -229,12 +218,12 @@ flowchart TD
 被 spill 的值需要在定义附近插入 `store`，在下一次使用前插入 `load`：
 
 ```asm
-    sw   t0, 16(sp)      ; spill v（把值写回栈槽）
+    sw   t0, 16(sp)      # spill v（把值写回栈槽）
     ...
-    lw   t0, 16(sp)      ; reload v（重新读回寄存器）
+    lw   t0, 16(sp)      # reload v（重新读回寄存器）
 ```
 
-选择 spill 候选时通常综合考虑：区间长度（短区间优先）、跨调用次数（少跨越的优先）、使用次数（少使用的优先）、是否可 rematerialize（可重算的最适合 spill）。
+选择 spill 候选时通常综合考虑：动态定义/使用频率、循环深度、访存和跨调用保存代价、冲突度，以及是否能廉价 rematerialize。不能仅凭区间长短判断代价。
 
 ## 六、目标代码窥孔优化
 
@@ -294,13 +283,16 @@ add v2, v1, v3                add t2, t0, t1
 功能样例评测调用 `-asm`，不带 `-opt`；性能样例评测调用 `-asm -opt`。编译器必须支持 `-opt`，并在该开关下启用已实现的优化。
 
 ```bash
+# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
+# qemu-riscv64 命令也在此终端输入，由 QEMU 执行 RISC-V 程序
 cmake -S . -B build
 cmake --build build
 ./compiler -asm < input.c > input.s
 ./compiler -asm -opt < input.c > input.opt.s
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
   -nostdlib -static input.opt.s third_party/toyc/libtoyc.a -o input
-./input < input.in > result.out
+# 在开发主机终端调用 QEMU，运行刚链接的 RISC-V 程序
+qemu-riscv64 ./input < input.in > result.out
 ```
 
 第六部分必须提交可编译的完整文件：

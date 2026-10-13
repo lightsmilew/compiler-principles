@@ -18,24 +18,24 @@ Spill 是寄存器分配不可避免的副产品：可用物理寄存器数量�
 如果函数中同时活跃的值超过可用寄存器数量，分配器就需要把部分值 spill 到栈上。
 ```
 
-如果示例函数有 25 个活跃区间同时存在，至少有 6 个值需要 spill；实际数量还会受到跨调用约束和保留寄存器的影响。
+需要 spill 的数量取决于实际可分配寄存器集合；使用帧指针时 `s0` 不可分配，参数寄存器可在满足固定参数位置及调用约束时参与分配，不能仅用“25 减 19”决定溢出数量。
 
 ## 二、Spill 代码模式
 
 spill 的值在定义点附近写栈，使用点之前从栈读回：
 
 ```asm
-; 原始（理想情况，所有值都在寄存器）
+# 原始（理想情况，所有值都在寄存器）
 addi t0, t1, 1
 mul  t2, t0, a0
-add  t3, t2, a0
+add  t3, t0, a0
 
-; t0 被 spill（槽位 16(sp)）
+# t0 被 spill（槽位 16(sp)）
 addi t0, t1, 1
-sw   t0, 16(sp)              ; 定义点附近 store
-lw   t4, 16(sp)              ; 使用点之前 load
+sw   t0, 16(sp)              # 定义点附近 store
+lw   t4, 16(sp)              # 使用点之前 load
 mul  t2, t4, a0
-lw   t4, 16(sp)              ; 每次使用前都要 load
+lw   t4, 16(sp)              # 每次使用前都要 load
 add  t3, t4, a0
 ```
 
@@ -73,7 +73,7 @@ ToyC 中适合重算的：
 
 - 整数立即数 `addi %a, N`（只要 `a` 仍可用）
 - 整数 `addi %a, 0`（等价于 `mv`，但实际不生成）
-- 简单函数参数加载（`lw %v, offset(sp)`）
+- 已证明内容不变且地址仍有效的普通内存加载；不能把一般 load 当成无条件可重算指令
 
 ## 四、栈槽分配
 
@@ -94,7 +94,7 @@ public:
 };
 ```
 
-RISC-V ABI 要求栈 16 字节对齐。每个槽位至少 8 字节，复杂的（结构体）按需对齐。
+RISC-V ABI 要求 `sp` 保持 16 字节对齐，栈帧总大小向上取整到 16 字节。32 位整数 spill 槽可用 4 字节，保存 64 位寄存器的槽用 8 字节；各槽按自身大小和对齐分配。
 
 ```asm
 addi sp, sp, -64          # 分配 64 字节栈帧（含 spilled values）
@@ -109,13 +109,13 @@ sd   t1, 8(sp)            # spilled value #2
 ### 5.1 共享相邻 store/load
 
 ```asm
-; 朴素
+# 朴素
 sw t0, 16(sp)
 lw t1, 16(sp)
 mul t2, t1, a0
 
-; 优化：spill 后第一个 use 后 load 到新虚拟寄存器
-; 这样只在 spill/第一次 use 配对
+# 优化：spill 后第一个 use 后 load 到新虚拟寄存器
+# 这样只在 spill/第一次 use 配对
 addi s_scratch, zero, ...
 sw   t0, 16(sp)
 lw   s_scratch, 16(sp)
@@ -124,29 +124,27 @@ mul  t2, s_scratch, a0
 
 ### 5.2 Hoist 跨调用 spill
 
-如果一个 spilled 值在调用点前后都需要，可以把 store 提前到调用前一次，load 推迟到调用后一次：
+同一 spill 槽保存的值若没有改变，可删除重复写回；但调用可能覆盖 `t` / `a` 寄存器，不能随意把两次调用之间的使用移到第二次调用之后。下面只省掉重复 store，保留每次传参所需的 reload：
 
 ```asm
-; 朴素
+# 朴素
 sw   t0, 16(sp)
+lw   a0, 16(sp)
 call foo
-lw   t1, 16(sp)
-mul  t2, t1, a0
+lw   t0, 16(sp)
 sw   t0, 16(sp)
+lw   a0, 16(sp)
 call bar
-lw   t1, 16(sp)
-mul  t3, t1, a0
 
-; 优化
-sw   t0, 16(sp)              ; 一次 store
+# 优化
+sw   t0, 16(sp)              # 一次 store
+lw   a0, 16(sp)
 call foo
-call bar                      ; 两次调用之间不重 load
-lw   t1, 16(sp)
-mul  t2, t1, a0
-mul  t3, t1, a0
+lw   a0, 16(sp)              # a0 可能被 foo 改写，传给 bar 前必须重新加载
+call bar
 ```
 
-这种"spill coalescing"需要活跃区间分析支持跨调用合并。
+这项优化要求证明两次调用均不能修改该 spill 槽，且槽中值未更新；两次调用和各自实参的求值顺序保持一致。
 
 ### 5.3 避免重复 spill
 
@@ -173,6 +171,7 @@ cost = Σ (load_count + store_count) × frequency_of_block
 ## 七、Spill 调试
 
 ```bash
+# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
 # 1. 查看汇编中 lw/sw 数量
 ./compiler -asm -opt < input.c > input.opt.s
 grep -c "lw\|sw" input.opt.s

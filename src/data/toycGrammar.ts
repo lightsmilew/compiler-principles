@@ -3,19 +3,14 @@ export const toycGrammar = `CompUnit    -> FuncDef+
 FuncDef     -> ('int' | 'void') ID '(' [ Param (',' Param)* ] ')' Block
 Param       -> 'int' ID
 
-Block       -> '{' BlockItem* '}'
-BlockItem   -> Decl | Stmt
-
-Decl        -> VarDecl | ConstDecl
-VarDecl     -> 'int' VarDef (',' VarDef)* ';'
-VarDef      -> ID [ '=' Expr ]
-ConstDecl   -> 'const' 'int' ConstDef (',' ConstDef)* ';'
-ConstDef    -> ID '=' Expr
+Block       -> '{' Stmt* '}'
 
 Stmt        -> Block
             | ';'
             | Expr ';'
             | ID '=' Expr ';'
+            | 'int' ID [ '=' Expr ] ';'
+            | 'const' 'int' ID '=' Expr ';'
             | 'if' '(' Expr ')' Stmt [ 'else' Stmt ]
             | 'while' '(' Expr ')' Stmt
             | 'break' ';'

@@ -7,9 +7,8 @@ import type * as Preset from '@docusaurus/preset-classic';
 /**
  * GitHub Pages 部署参数。
  *
- * 在 GitHub Actions 中构建时，会自动读取当前仓库的 owner / name；
- * 本地构建或首次部署前，请把下面的兜底值改成你自己的 GitHub 用户名与仓库名。
- * （也可以用环境变量 GITHUB_REPOSITORY_OWNER / GITHUB_REPOSITORY 覆盖）
+ * 当前使用固定的 owner / name、url 和 baseUrl。
+ * Fork 或改名时须同步修改这些值；环境变量不会覆盖它们。
  */
 // 已硬编码为 https://lightsmilew.github.io/compiler-principles/
 const organizationName = 'lightsmilew';
@@ -37,6 +36,7 @@ const config: Config = {
 
   trailingSlash: false,
   onBrokenLinks: 'throw',
+  onBrokenAnchors: 'throw',
 
   // 站点与文档语言为简体中文
   i18n: {
@@ -47,6 +47,7 @@ const config: Config = {
   // 开启 Mermaid 图表（语法树、DFA、流程图等）
   markdown: {
     mermaid: true,
+    hooks: {onBrokenMarkdownLinks: 'throw'},
   },
   themes: ['@docusaurus/theme-mermaid'],
 

@@ -95,13 +95,15 @@ Binary("<", lhs, rhs)-> type = int,  is_boolean = true
  5:         if type(p) != int then error("参数只能为 int"); end if
  6:         declare(p.name, kind = parameter, type = int);
  7:     end for
- 8:     ctx.loopDepth = 0;
- 9:     analyzeBlock(fn.body);
+ 8:     ctx.loopDepth = 0;  ctx.currentFunction = fn;
+ 9:     for s in fn.body.statements do analyzeStmt(s); end for  // 最外层函数体与形参共用作用域
 10:     if fn.returnType == int and not returnsOnAllPaths(fn.body) then
 11:         error("int 函数必须在所有路径上返回值");       // 见算法 5
 12:     end if
 13:     leaveScope();
 ```
+
+函数按源文件顺序登记并分析；先登记当前函数签名再分析其体，以支持自身递归。不能提前登记全部后续函数来放行前向调用。调用和变量引用都查询最近的名字绑定，再检查符号种类。
 
 **算法 2 · 作用域栈的压入、声明与查找（Scope Stack）**
 
@@ -117,12 +119,13 @@ Binary("<", lhs, rhs)-> type = int,  is_boolean = true
  6:         error("同一作用域重复声明: " + name);     // 同层不能重名
  7:     end if
  8:     scopes.top[name] = sym;
- 9:
-10: lookup(name):
-11:     for scope in reversed(scopes) do              // 由内向外逐层查找
-12:         if name in scope then return scope[name]; end if
-13:     end for
-14:     error("使用了未声明的标识符: " + name);        // 未找到
+ 9:     return sym;
+10:
+11: lookup(name):
+12:     for scope in reversed(scopes) do              // 由内向外逐层查找
+13:         if name in scope then return scope[name]; end if
+14:     end for
+15:     error("使用了未声明的标识符: " + name);        // 未找到
 ```
 
 **算法 3 · 变量与常量声明检查（Declaration Check）**
@@ -132,16 +135,13 @@ Binary("<", lhs, rhs)-> type = int,  is_boolean = true
 
 ```
  1: analyzeDecl(decl):
- 2:     for each item in decl.items do
- 3:         if decl.isConst and item.initializer == none then
- 4:             error("const 必须有初始化表达式");      // 常量必须有初值
- 5:         end if
- 6:         sym = declare(item.name, { type: decl.type, isConst: decl.isConst });
- 7:         if item.initializer != none then
- 8:             t = analyzeExpr(item.initializer);
- 9:             checkType(t, decl.type);                // 类型必须一致
-10:         end if
-11:     end for
+ 2:     if decl.isConst and decl.initializer == none then
+ 3:         error("局部 const 必须有初始化表达式");
+ 4:     end if
+ 5:     sym = declare(decl.name, { kind: variable, type: int, isConst: decl.isConst });
+ 6:     if decl.initializer != none then
+ 7:         checkType(analyzeExpr(decl.initializer), int);
+ 8:     end if
 ```
 
 **算法 4 · 语句与表达式检查（Statement & Expression Check）**
@@ -152,41 +152,47 @@ Binary("<", lhs, rhs)-> type = int,  is_boolean = true
 ```
  1: analyzeStmt(stmt):
  2:     match stmt:
- 3:         Block(b):        enterScope();  for s in b do analyzeStmt(s); end for  leaveScope();
- 4:         Assign(lhs, rhs):
- 5:             sym = requireDeclared(lhs.name);
- 6:             if sym.isConst then error("常量不能作为赋值左值"); end if
- 7:             checkType(analyzeExpr(rhs), sym.type);
- 8:         If(c, t, e):
- 9:             checkCond(c);  analyzeStmt(t);
-10:             if e != none then analyzeStmt(e); end if
-11:         While(c, body):
-12:             checkCond(c);
-13:             ctx.loopDepth++;                        // 进入循环，深度 +1
-14:             analyzeStmt(body);
-15:             ctx.loopDepth--;                        // 离开循环，深度 -1
-16:         Break | Continue:
-17:             if ctx.loopDepth == 0 then error("break/continue 只能出现在循环中"); end if
-18:         Return(v):
-19:             checkType(analyzeExpr(v), ctx.currentFunction.returnType);
-20:         ExprStmt(e):     analyzeExpr(e);
-21:     end match
-22:
-23: analyzeExpr(e):
-24:     match e:
-25:         Call(name, args):
-26:             fn = lookupFunction(name);
-27:             if fn == none then error("调用未声明的函数: " + name); end if
-28:             if fn.returnType == void then error("void 函数不能作为右值"); end if
-29:             for a in args do checkType(analyzeExpr(a), int); end for
-30:             return fn.returnType;
-31:         Number(n):       return int;
-32:         Variable(n):     return requireDeclared(n).type;
-33:         Binary/Unary:    both sides must be int;  return int;   // 比较/逻辑结果也是 int(0/1)
-34:     end match
+ 3:         Decl(d):         analyzeDecl(d);
+ 4:         Empty:           return;
+ 5:         Block(b):        enterScope();  for s in b do analyzeStmt(s); end for  leaveScope();
+ 6:         Assign(lhs, rhs):
+ 7:             sym = requireDeclared(lhs.name); require(sym.kind in {variable, parameter});
+ 8:             if sym.isConst then error("常量不能作为赋值左值"); end if
+ 9:             checkType(analyzeExpr(rhs), sym.type);
+10:         If(c, t, e):
+11:             checkCond(c);  analyzeStmt(t);
+12:             if e != none then analyzeStmt(e); end if
+13:         While(c, body):
+14:             checkCond(c);
+15:             ctx.loopDepth++;                        // 进入循环，深度 +1
+16:             analyzeStmt(body);
+17:             ctx.loopDepth--;                        // 离开循环，深度 -1
+18:         Break | Continue:
+19:             if ctx.loopDepth == 0 then error("break/continue 只能出现在循环中"); end if
+20:         Return(v):
+21:             if ctx.currentFunction.returnType == void then require(v == none);
+22:             else require(v != none); checkType(analyzeExpr(v), int); end if
+23:         ExprStmt(e):     analyzeExpr(e);
+24:     end match
+25:
+26: analyzeExpr(e):
+27:     match e:
+28:         Call(name, args):
+29:             fn = lookup(name);
+30:             require(fn.kind == function);
+31:             if fn == none then error("调用未声明的函数: " + name); end if
+32:             require(length(args) == length(fn.params));  // 参数数量必须匹配
+33:             for a in args do checkType(analyzeExpr(a), int); end for
+34:             return fn.returnType;
+35:         Number(n):       return int;
+36:         Variable(n):     sym = requireDeclared(n); require(sym.kind in {variable, parameter}); return sym.type;
+37:         Binary/Unary:    both sides must be int;  return int;   // 比较/逻辑结果也是 int(0/1)
+38:     end match
 ```
 
 **算法 5 · 所有路径返回值检查（Return-on-All-Paths）**
+
+下面是保守的结构检查示意，不是完整的控制流证明。它可能拒绝 `while (1) { return 1; }` 等合法写法；完整实现应构造 CFG，处理可证明的恒真条件，区分 `return`、`break`、`continue` 和可达的函数出口，并避免把不可达的 `return` 算作有效返回。
 
 **输入（Input）：** 语句节点 `node`。
 **输出（Output）：** 布尔值，表示该节点是否在所有路径上返回。

@@ -29,6 +29,7 @@ toyc-cpp/                        # 仓库目录名可自行设置，此处以 to
 最常用的两种调用：
 
 ```bash
+# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
 ./compiler -asm < input.c > input.s          # 功能样例：不带 -opt
 ./compiler -asm -opt < input.c > input.opt.s # 性能样例：启用优化
 ```
@@ -43,7 +44,7 @@ toyc-cpp/                        # 仓库目录名可自行设置，此处以 to
 | 第三部分（IR） | `*.c` | — | — | `*.ll` / `*.opt.ll` |
 | 第四部分（汇编） | `*.c` | `*.in` | `input`（无后缀 ELF） | `*.out` |
 
-**完整流程**：`./compiler` 读取 `*.c` → 输出汇编 `*.s` → `riscv64-unknown-elf-gcc` 链接 `*.s` 与 `libtoyc.a` → 生成可执行文件（无后缀，如 `input`）→ 运行可执行文件，把 stdout 重定向到 `*.out`，这是助教评测脚本实际比对的文件。
+**完整流程**：`./compiler` 读取 `*.c` → 输出汇编 `*.s` → `riscv64-unknown-elf-gcc` 链接 `*.s` 与 `libtoyc.a` → 生成可执行文件（无后缀，如 `input`）→ 运行可执行文件，把 stdout 重定向到 `*.out`，本地对拍时比较此文件，同时检查程序退出代码。
 
 `*.c` 是 ToyC 源文件，`*.in` 是 ToyC 程序运行时的标准输入数据（例如 `getint()` 读取的内容），`*.out` 是 ToyC 程序的标准输出结果（例如 `putint()` 写入的内容）。三者不要混淆。
 :::
@@ -64,6 +65,8 @@ toyc-cpp/                        # 仓库目录名可自行设置，此处以 to
 链接时显式加入该文件：
 
 ```bash
+# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
+# qemu-riscv64 命令也在此终端输入，由 QEMU 执行 RISC-V 程序
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
    -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
 qemu-riscv64 ./input < input.in > result.out
@@ -102,6 +105,8 @@ https://myuser:ghp_xxxxxx@github.com/myuser/myproj.git
 ## 七、提交前检查
 
 ```bash
+# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
+# qemu-riscv64 命令也在此终端输入，由 QEMU 执行 RISC-V 程序
 # 检查当前分支和远端
 git branch --show-current
 git remote -v
@@ -111,10 +116,11 @@ git status --short
 git grep -n -E 'token|ghp_|glpat-|password' -- ':!*.md'
 
 # 确认 RV64GC 输出和标准输入
-./compiler < input.c > /tmp/input.s
+./compiler -asm < input.c > /tmp/input.s
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
   -nostdlib -static /tmp/input.s third_party/toyc/libtoyc.a -o /tmp/input
-/tmp/input < /tmp/input.in > /tmp/result.out   # result.out 是 ToyC 程序 stdout，与 input.out 对比
+# 在开发主机终端调用 QEMU；/tmp/input.in 需事先准备
+qemu-riscv64 /tmp/input < /tmp/input.in > /tmp/result.out   # result.out 是 ToyC 程序 stdout，与 input.out 对比
 ```
 
 平台提交后应记录提交时间、仓库地址、分支，便于出现构建问题时定位具体版本。

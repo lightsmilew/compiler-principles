@@ -16,12 +16,12 @@ description: 删除不可达基本块、折叠恒真假分支、把多分支合�
 ; 模式 1：恒真分支
 br i1 true, label %T, label %F
 ; 等价于： br label %T
-; 块 %F 变为不可达
+; 仅当 %F 没有其它可达前驱时，%F 才变为不可达
 
 ; 模式 2：相同目标
 br label %X
-L: br label %X       ; L 不可达
-; 等价于： 删除 L，直接 fallthrough 到 X
+L: br label %X       ; 是否不可达需要从入口做可达性分析
+; 仅当 L 不可达时才删除 L；LLVM IR 不使用隐式 fall-through
 
 ; 模式 3：跳转到下一块（仅在目标代码布局阶段省略跳转）
 br label %N          ; 其中 N 就是布局上的下一块
@@ -122,7 +122,7 @@ flowchart TB
 
 几个观察：
 
-- DCE 让分支条件变成常量 → 触发 if-then 折叠 → 产生新的不可达块 → DCE 再清理；
+- 常量折叠与传播让分支条件变成常量 → 触发 if-then 折叠 → 产生新的不可达块 → DCE 再清理；
 - 块合并后块内的活跃变量 / 可用表达式集合需要重新计算——所以整轮要循环到不动点；
 - 实现时不必严格分阶段，可以在一个 pass 内对每个基本块做局部简化并记录修改标志。
 
@@ -141,23 +141,26 @@ flowchart TB
  5:             T = B.terminator;
  6:             // 1. 折叠恒真的条件分支
  7:             if T is (br i1 c, %X, %Y) and c is a constant then
- 8:                 B.terminator = br (c ? %X : %Y);  changed = true;
+ 8:                 replaceBranchAndUpdatePhiEdges(B, c ? %X : %Y); changed = true;
  9:             end if
 10:             // 2. 跳到跳转：替换为最终目标
-11:             if T jumps to L and L 只有一条 br 跳到 L2 then
-12:                 T.target = L2;  changed = true;
-13:             end if
-14:         end for
-15:         // 3. 合并 A -> B 且 B 仅有 A 一个前驱的块
-16:         for each edge (A -> B) do
-17:             if B.predecessors has only A and (B has no phi or all phi can be simplified) then
-18:                 inline B into A;  changed = true;
-19:             end if
-20:         end for
-21:         // 4. 删除不可达块，并把只剩一条入边的 phi 退化
-22:         changed |= removeUnreachableBlocks(func);
-23:     until not changed
-24:     return func;
+11:             T = B.terminator;                         // 使用更新后的终结指令
+12:             if T jumps to L and L has no phi and contains only br L2 and L2 != L then
+13:                 if redirectEdgePreservingPhiIsSafe(B, L, L2) then
+14:                     redirectEdgeAndUpdatePhi(B, L, L2); changed = true;
+15:                 end if                                // 遇到循环或 phi 冲突则保留原边
+16:             end if
+17:         end for
+18:         // 3. 合并 A -> B 且 B 仅有 A 一个前驱的块
+19:         for each edge (A -> B) do
+20:             if A != B and A has only successor B and B has only predecessor A then
+21:                 replaceSingleIncomingPhis(B); mergeBlocksAndUpdateEdges(A, B); changed = true;
+22:             end if
+23:         end for
+24:         // 4. 删除不可达块，并把只剩一条入边的 phi 退化
+25:         changed |= removeUnreachableBlocks(func);
+26:     until not changed
+27:     return func;
 ```
 ## 六、正确性陷阱
 

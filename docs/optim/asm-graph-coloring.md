@@ -22,8 +22,8 @@ description: 在冲突图上做 K 着色，把同时活跃的值映射到不同�
 
 任意 K ≥ 3 的图着色是 NP 完全问题。所以实际分配器都用启发式：
 
-- 简化（Simplify）：删掉度 < K 的节点（剩余邻居一定能用剩余颜色覆盖），压入栈；
-- 选择（Select）：删到没有可删节点时挑一个节点"可能需要 spill"（启发式）；
+- 简化（Simplify）：暂时移除度 < K 的节点并压栈；回填时最多有 K−1 个邻居占用颜色，因此至少剩一个可用颜色；
+- 选择 spill 候选：没有低度节点时，暂时移除一个高代价较低的节点；候选仍有可能在回填时获得颜色；
 - 回填（Assign）：从栈中弹回节点，按邻居颜色挑一个未用颜色；
 - Spill：发现颜色不够时回溯引入 spill。
 
@@ -39,7 +39,7 @@ flowchart TD
 
 ## 三、Briggs 简化
 
-Briggs 提出的简化顺序：
+下面展示不含预着色节点与合并操作的乐观简化骨架。实际实现还需保留物理寄存器约束：
 
 **算法 · 简化阶段（Briggs Simplify）**
 
@@ -49,27 +49,25 @@ Briggs 提出的简化顺序：
 ```
  1: simplify(G, K):
  2:     stack = [];
- 3:     worklist = sortByDegree(nodes(G));
- 4:     while worklist not empty do
- 5:         v = worklist.pop();
- 6:         if degree(v) < K then                       // 度数小于 K，一定能着色
- 7:             stack.push(v);  G.remove(v);
- 8:             decrementDegreeOfNeighbors(v);           // 邻居度数 -1，可能变得可删
- 9:         else
-10:             v = chooseSpillCandidate(G);             // 没有低度节点 -> 选一个 spill 候选
-11:             markForSpill(v);  stack.push(v);  G.remove(v);
-12:         end if
-13:     end while
-14:     return stack;
+ 3:     work = copyGraph(G);                              // 原图留给回填阶段
+ 4:     while work has unremoved nodes do
+ 5:         v = findNodeWithDegreeLessThan(work, K);        // 使用当前图中的度数
+ 6:         if v == none then
+ 7:             v = chooseSpillCandidate(work);            // 乐观候选，暂不插入访存
+ 8:         end if
+ 9:         stack.push(v);
+10:         work.removeNodeAndIncidentEdges(v);            // 更新邻居度数与低度工作集
+11:     end while
+12:     return stack;
 ```
 
-简化后剩余的图要么是 K-可着色的（每点度 < K），要么必须 spill。
+找不到度 < K 的节点不代表图不可着色。例如偶数环每点度数都是 2，却仍可用 2 种颜色着色；高阶节点只是候选，是否 spill 在回填阶段确定。
 
 ## 四、合并（Coalescing）
 
-`mv t0, t1` 形式的 move 指令把 `t0` 和 `t1` 关联起来。如果 `t0` 和 `t1` 没有冲突（即不在对方邻居中），可以合并为一个节点，删除这条 `mv`。
+`mv t0, t1` 形式的 move 指令把 `t0` 和 `t1` 关联起来。没有冲突是合并的必要条件；还要检查合并后的邻居约束，避免把可着色的图变成不可着色的图。
 
-合并需要谨慎——激进合并可能引入新的 spill。George 风格保守，Briggs 风格激进但带保守回滚。
+合并需要谨慎——激进合并可能引入新的 spill。George 与 Briggs 都提供保守判据：Briggs 检查合并后的高度邻居数；George 检查一个节点的邻居是否已与另一个节点冲突或为低度节点。具体条件与预着色节点处理见 [George 与 Appel 的原论文](https://www.cs.tufts.edu/comp/150FP/archive/andrew-appel/iterated.pdf)。
 
 ## 五、冻结（Freeze）
 
@@ -81,11 +79,11 @@ Briggs 提出的简化顺序：
 
 ```text
 优先级考虑：
-1. 区间长度（短区间优先 spill，因为代价低）
-2. 跨调用次数（少跨越调用的优先 spill）
-3. 使用次数（少使用的优先 spill）
-4. 已有 spill 次数（避免反复 spill）
-5. 是否可 rematerialize（可重算的最适合 spill）
+1. 动态定义与使用频率（可用循环深度或 profile 加权）
+2. load/store 和跨调用保存的代价
+3. 移除该节点能释放多少冲突约束
+4. 是否能廉价 rematerialize，且所依赖的值仍可用
+5. 是否已反复 spill，需要区间分裂或其它策略
 ```
 
 Chaitin 的 cost heuristic：
@@ -118,22 +116,20 @@ double spill_cost(LiveRange r) {
  6:         if c != none then assign(v, c);
  7:         else
  8:             markForSpill(v);                        // K 个颜色都不够 -> spill
- 9:             insertSpillCode(v);                     // 插入 sw / lw
+ 9:             spills.add(v);                           // 完成回填后统一重写
 10:         end if
 11:     end while
 ```
 
-如果所有 K 个颜色都已被用，v 就 spill——分配失败，回退到插入 `sw/lw` 后重做冲突图。
+若所有允许的颜色均被邻居占用，就把该值加入 spill 集合。完成本轮回填后统一插入 load/store，再重新分析活跃性、构造冲突图与分配；不要边回填边修改正在使用的图。实际颜色集合还要扣除保留寄存器，并满足调用点的 clobber 约束。
 
 ## 八、与线性扫描的对比
 
 | 维度 | 图着色 | 线性扫描 |
 | --- | --- | --- |
-| 寄存器效率 | 通常更高 5%~10% | 略低 |
-| 代码量 | 超过 1000 行 | 少于 300 行 |
-| 编译时间 | 长：多次图遍历 | 短 |
-| 实现难度 | 高 | 低 |
-| 课程加分 | 是 | 基础 |
+| 分配依据 | 冲突关系，可结合合并与分裂 | 按区间顺序处理，可扩展分裂与合并 |
+| 实现工作 | 图维护、简化、回填及 spill 迭代 | 区间维护、到期处理及 spill/reload |
+| 验证方式 | 同一测试集比较访存、代码大小和运行时间 | 同一测试集比较访存、代码大小和运行时间 |
 
 ## 九、实现建议
 
@@ -152,7 +148,9 @@ ToyC 实现图着色的最低要求：
 ## 十、测试与对比
 
 ```bash
-# 同一份输入，比较线性扫描 vs 图着色的代码质量
+# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
+# 以下 -regalloc 是自定义调试选项，需先由自己的编译器实现
+# 同一份输入，比较线性扫描与图着色的代码质量
 ./compiler -asm -regalloc=linear < input.c > input.linear.s
 ./compiler -asm -regalloc=graph  < input.c > input.graph.s
 

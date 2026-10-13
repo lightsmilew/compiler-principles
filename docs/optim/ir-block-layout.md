@@ -11,18 +11,17 @@ description: 用启发式算法预测哪个出口更可能被进入，把热路�
 
 ## 一、必要性
 
-顺序执行的指令没有额外代价，跳转才有：
+布局可能改变取指局部性、显式跳转数量与分支预测行为，收益取决于处理器和输入：
 
-- 处理器（以及 QEMU 的翻译缓存）更希望下一条指令紧接在当前指令之后；一条 `j` 意味着重新取指；
-- 条件分支预测失败时流水线需要冲刷，代价为十几到几十个周期；
-- 跳转还会拉大标签与指令地址的距离，降低指令缓存局部性。
+- 相邻热块可能改善指令缓存局部性，并让后端省略通向下一块的无条件跳转；
+- 分支预测失败的代价与微架构有关，RISC-V ISA 没有规定固定周期数；
+- QEMU 的执行时间包含模拟器开销，不能直接当作真实硬件上的流水线指标。
 
 而"哪个分支更可能被进入"是可以估计的，常用的静态经验规则包括：
 
-- 循环的回边几乎总会走（循环体要执行多次）；
-- `if` 的 `then` 分支通常比 `else` 更常执行；
-- 向前跳的分支（forward branch）常常是出错退出、提前返回这类冷路径；
-- 向后跳的分支（backward branch）常常是循环回边，属于热路径。
+- 循环回边可作为候选热边，但零次或一次迭代的循环未必如此；
+- 没有 profile 或程序语义依据时，不能认定 `then` 比 `else` 更热；
+- 地址方向可用于启发式，但向前、向后跳都不能单独证明执行频率。
 
 据此可以把热路径排成顺序执行，把跳转留给冷路径。
 
@@ -62,7 +61,7 @@ END:
     ret
 ```
 
-热路径上少了一条 `j`，且不跳转的路径正好是预测最准的那条。
+本例假设 `x > 0` 更常成立。第二种布局让热路径少执行一条 `j`，但需要执行一次已采用的条件跳转；能否更快须实测，不能仅凭分支方向判断。
 
 ```mermaid
 flowchart TB
@@ -77,11 +76,11 @@ flowchart TB
 | --- | --- |
 | 热边相邻 | 后端发射时省略该边上的无条件跳转（fall-through） |
 | 反转条件分支 | 让常走的边走顺序路径，冷边去跳 |
-| 冷块后移 | `break` / `continue` / 错误处理等冷块集中到函数末尾，不打断热路径 |
+| 冷块后移 | 根据 profile 或明确的路径信息把冷块后移；`break` / `continue` 本身不代表冷路径 |
 | 循环布局 | 把循环条件判断放在末尾，每轮少一条跳转 |
 | 合并单链块 | 只有一条前驱和一条后继的链式块尽量排在一起 |
 
-这些手段都不改变程序语义，只影响性能，因此容易被忽略：不实现也能通过功能测试，实现之后才有性能收益。
+正确实现必须保持每条 CFG 边、入口和出口的语义；性能收益需实测。
 
 ## 三、示例
 
@@ -125,7 +124,7 @@ THEN:
     ret
 ```
 
-两条路径的指令条数相同，差别在于连续调用时的取指行为：重排后热路径完全连续，不会被冷路径的指令隔开。
+两种布局每条路径的指令条数相同，均在本块返回；这里不能推出第二种布局更快。若假设 `x > 0` 更热，第一种布局使该路径直接顺序执行，是可比较的候选布局。
 
 循环的情形（ToyC 的 `while`）：
 
@@ -141,10 +140,10 @@ while (i < n) {
 ```asm
     j    COND
 BODY:
-    add  sum, sum, i
-    addi i, i, 1
+    addw t0, t0, t1     # t0=sum，t1=i，t2=n，int 使用 32 位操作
+    addiw t1, t1, 1
 COND:
-    blt  i, n, BODY      # 条件成立就跳回循环体（向后分支，热）
+    blt  t1, t2, BODY      # 条件成立就跳回循环体（向后分支，热）
     # 循环退出后直接从下一行继续，不需要额外跳转
 AFTER:
 ```
@@ -166,16 +165,15 @@ AFTER:
  3:         w = 1;
  4:         if S dominates P then w = w * 10; end if          // 回边（循环体）：权重最高
  5:         if indexOf(S) < indexOf(P) then w = w * 2; end if // 向后分支：多为循环继续
- 6:         if isConditionalBranch(P) and E is the "then" edge then
- 7:             w = w * 2;                                    // if 的 then 通常比 else 更常执行
- 8:         end if
- 9:         if isExitEdge(E) then w = 1; end if               // 循环出口、提前返回：冷路径
-10:         E.weight = w;
-11:     end for
-12:     return cfg;
+ 6:         if hasProfileCount(E) then w = profileCount(E); end if
+ 7:         // 无测量数据时，不因 then/else 名称改变权重
+ 8:         // 出口是否为冷边也需要程序或 profile 依据
+ 9:         E.weight = w;
+10:     end for
+11:     return cfg;
 ```
 
-上面的系数是一组常见的启发式取值，可以按经验调整。若评测环境提供 profile 信息（例如采样数据），代入真实频率会更准确。
+上面的 10 与 2 是教学示例的自定义系数，不是执行频率的测量结果或通用标准。若评测环境提供 profile 信息（例如采样数据），代入真实频率会更准确。
 
 **算法 2 · 链式块布局（Chain-based Layout）**
 
@@ -194,20 +192,21 @@ AFTER:
  9:         if E.tail.chain == E.head.chain then continue; end if        // 合并会成环，跳过
 10:         if E.tail is not the last block of its chain then continue; end if
 11:         if E.head is not the first block of its chain then continue; end if
-12:         mergeChains(E.tail.chain, E.head.chain);           // 3. 串成一个更长的链
-13:     end while
-14:     order = [];
-15:     for each chain C in descendingOrderOfWeight(cfg) do
-16:         order.pushBlocksOf(C);                             // 4. 热链在前，冷链在后
-17:     end for
-18:     for each edge E = (P -> S) in cfg do
-19:         if S is the block right after P in order then
-20:             markFallthrough(P, S);                         // 5. 相邻：后端发射时省略跳转
-21:         else if isConditionalBranch(P) then
-22:             considerInvertBranch(P, S);                    //    反转条件，让热边走顺序路径
-23:         end if
-24:     end for
-25:     return order;
+12:         if E.head.chain contains cfg.entry then continue; end if // 入口不能被接到其它块之后
+13:         mergeChains(E.tail.chain, E.head.chain);           // 3. 串成一个更长的链
+14:     end while
+15:     order = blocksOf(chainContaining(cfg.entry));       // 函数入口必须最先发射
+16:     for each remaining chain C in descendingOrderOfWeight(cfg) do
+17:         order.pushBlocksOf(C);                             // 4. 热链在前，冷链在后
+18:     end for
+19:     for each block P in order do
+20:         next = nextBlock(P, order);
+21:         if P has an unconditional branch to next then markFallthrough(P, next);
+22:         else if P has a conditional branch then
+23:             chooseBranchPolarityAndExplicitJumps(P, next); // 真/假两条边均须到达原目标
+24:         end if
+25:     end for
+26:     return order;
 ```
 
 该算法的思路与最大生成树类似：按权重从大到小把边固定为相邻关系，最终拼出若干条链，再按热度排列这些链。只有链内相邻的边才能成为 fall-through，因此权重估计的准确性直接决定收益。
@@ -222,9 +221,9 @@ AFTER:
 ## 五、优化效果
 
 - 减少跳转：热边成为 fall-through 后，后端发射可省略热路径上的无条件跳转；循环体每轮可能少一条 `j`。
-- 改善分支预测：条件分支的方向与常走的边对齐后，静态预测命中率提高，动态预测器也更容易收敛。
+- 改善分支预测：方向调整可能改变预测行为，是否改善取决于硬件与实际路径频率。
 - 改善指令缓存局部性：热块彼此相邻，冷块（错误处理、`break` 出口）集中到末尾，不会打断热路径。
-- 代价与风险：布局只改顺序、不改语义，因此不会导致程序出错；但若权重估计偏差过大（把冷路径当作热路径），效果可能不如原始顺序。这也是重排通常与窥孔优化、内联一起放在"收益不确定时保持保守"的位置上的原因。
+- 代价与风险：漏发跳转、错误反转条件或移动入口都可能导致错误；但若权重估计偏差过大（把冷路径当作热路径），效果可能不如原始顺序。这也是重排通常与窥孔优化、内联一起放在"收益不确定时保持保守"的位置上的原因。
 
 ## 六、正确性陷阱
 
@@ -241,11 +240,12 @@ AFTER:
 ## 七、动手验证
 
 ```bash
+# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
 # 优化前后的汇编
 ./compiler -asm      < test.c > base.s
 ./compiler -asm -opt < test.c > opt.s
 
-# 1. 统计无条件跳转条数（应当减少）
+# 1. 统计静态无条件跳转条数；不能单凭这个数判断实际收益
 grep -cE '^\s*j\s' base.s opt.s
 
 # 2. 对比块的出现顺序，确认热块被排到了前面

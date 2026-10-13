@@ -91,6 +91,7 @@ static final int MAX_LEN = 64;  // 常量 UPPER_SNAKE_CASE
 统一驱动必须支持 `-token`、`-ast`、`-asm` 和优化开关 `-opt`，从标准输入读取 ToyC 源程序、向标准输出写入阶段结果，测试时用重定向保存到文件：
 
 ```bash
+# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
 ./compiler -token   < input.c > input.token      # 第一部分：Token 流
 ./compiler -ast     < input.c > input.check-ast  # 第二部分：语法检查，输出 accept / reject
 ./compiler -asm     < input.c > input.s          # 功能样例：不带 -opt
@@ -103,6 +104,7 @@ static final int MAX_LEN = 64;  // 常量 UPPER_SNAKE_CASE
 `-ir` 不是必要接口，评测脚本不会调用。若实现了本地 IR 调试输出，可使用以下组合观察中间结果：
 
 ```bash
+# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
 ./compiler -ir < input.c > input.ll          # 可选：LLVM IR
 ./compiler -ir -opt < input.c > input.opt.ll  # 可选：优化后的 LLVM IR
 ```

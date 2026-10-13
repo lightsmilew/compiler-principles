@@ -58,7 +58,7 @@ flowchart LR
 1. 复制函数体：把被调函数的指令搬到调用点；
 2. 重命名局部值：被调函数的局部 SSA 值与形参都需要改名，避免与调用者中的值冲突；
 3. 实参替换形参：把形参的每一次使用替换为对应的实参值；
-4. 接好控制流：把原来的 `ret` 改为"把返回值赋给临时值并跳转到调用点的后继"，再删除 `call`。
+4. 接好控制流：克隆所有基本块，重映射分支目标与 `phi` 入边；把各个 `ret` 改为跳转到调用点的 continuation，在那里用 `phi` 合并返回值，再删除 `call`。
 
 正确性要求可以概括为两点：副作用顺序不变，控制流等价。
 
@@ -128,32 +128,37 @@ flowchart LR
 
 ```
  1: inline(M, shouldInline):
- 2:     CG = buildCallGraph(M);                              // 1. 建立调用图
+ 2:     CG = buildCallGraph(M);                              // 包括递归强连通分量
  3:     repeat
  4:         changed = false;
  5:         for each function F in bottomUpOrder(CG) do        // 2. 自底向上处理
  6:             for each callsite C inside F do
  7:                 callee = C.callee;
  8:                 if callee has no body then continue; end if      // 外部函数（getint/putint）不内联
- 9:                 if callee == F then continue; end if             // 直接递归不展开
+ 9:                 if callee belongs to a recursive SCC then continue; end if
 10:                 if not shouldInline(callee, C) then continue; end if
 11:                 clone = cloneBody(callee);
-12:                 renameLocalValues(clone, uniqueSuffix);         // 3. 局部值与形参重命名
+12:                 remapValuesBlocksBranchesAndPhiEdges(clone);   // 建立完整的旧值/块到新值/块映射
 13:                 for each (param, arg) in zip(callee.params, C.args) do
 14:                     replaceAllUsesWith(clone.param, arg);      // 4. 实参替换形参
 15:                 end for
-16:                 splitBlockAt(C);                                // 5. 在调用点切分基本块
-17:                 spliceBodyAt(C, clone);                         //    插入克隆的函数体
-18:                 replaceAllUsesWith(C.result, clone.returnValue);
-19:                 remove(C);                                      //    删除 call
-20:                 changed = true;
-21:             end for
-22:         end for
-23:     until not changed
-24:     return M;
+16:                 continuation = splitBlockAfter(C);             // 原后继 phi 的前驱随切块更新
+17:                 returns = rewriteReturnsAsBranches(clone, continuation);
+18:                 branchFromCallBlockToCloneEntry(C, clone);
+19:                 if C has a result then
+20:                     result = phiAtStart(continuation, returns); // 收集 (返回值, 返回块)
+21:                     replaceAllUsesWith(C.result, result);
+22:                 end if                                          // void 不创建结果 phi
+23:                 remove(C);
+24:                 changed = true;
+25:             end for
+26:         end for
+27:         CG = buildCallGraph(M);                       // 新调用点、大小和递归信息重新计算
+28:     until not changed
+29:     return M;
 ```
 
-第 12 行的重命名必不可少：被内联函数的局部值名（`%t`、`%x`）在调用者中可能已经存在，重命名后才是两个独立的值。
+克隆映射必不可少：值与块必须都是新对象，分支和 `phi` 不能指回原函数。多个返回点需要合并；单个返回点且其值支配所有结果使用时，可以直接复用该返回值。迭代期间使用调用点快照或安全迭代器，更新代码体积预算，避免扫描被删除的指令。
 
 **算法 2 · 内联判据（shouldInline，成本模型）**
 
@@ -193,7 +198,7 @@ flowchart LR
 
 ## 五、优化效果
 
-- 直接收益：消除 `call` / `ret`、传参与栈帧开销，短函数的开销可以降到原来的几分之一。
+- 直接收益：消除 `call` / `ret`、传参与栈帧开销，收益需用目标平台上的运行时间验证。
 - 间接收益：`call` 这层边界消失后，同一批优化可以跨过原来的函数边界工作。
   - 常量传播：常量实参直接进入函数体；
   - 死代码消除：内联进来的分支若条件为常量，整条分支可以删除；
@@ -218,6 +223,7 @@ flowchart LR
 `-ir` 不是必要接口，评测脚本不会调用；若实现了该本地调试接口，可额外导出内联后的 IR：
 
 ```bash
+# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
 # 内联与其它优化之后的 IR / 汇编
 ./compiler -ir -opt < test.c > after.ll   # 可选调试接口的组合调用
 ./compiler -asm -opt < test.c > after.s

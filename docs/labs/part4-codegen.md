@@ -71,9 +71,9 @@ flowchart TB
 
 | LLVM IR | RISC-V | 说明 |
 | --- | --- | --- |
-| `add i32 %a, %b` | `add a0, a0, a1` | 32 位加法 |
-| `sub i32 %a, %b` | `sub a0, a0, a1` | 32 位减法 |
-| `mul i32 %a, %b` | `mul a0, a0, a1` | 乘法 |
+| `add i32 %a, %b` | `addw a0, a0, a1` | 32 位加法，结果符号扩展 |
+| `sub i32 %a, %b` | `subw a0, a0, a1` | 32 位减法，结果符号扩展 |
+| `mul i32 %a, %b` | `mulw a0, a0, a1` | 32 位乘法，结果符号扩展 |
 | `sdiv i32 %a, %b` | `divw a0, a0, a1` | 有符号除法 |
 | `srem i32 %a, %b` | `remw a0, a0, a1` | 取模 |
 | `icmp slt i32 %a, %b` | `slt a0, a0, a1` | 小于比较 |
@@ -102,9 +102,9 @@ br i1 %cmp, label %then, label %else
 ```
 
 ```asm
-    lw    t0, offset_a
-    lw    t1, offset_b
-    blt   t0, t1, .Lthen      ; 比较 + 跳转二合一，无需存放比较结果
+    lw    t0, 0(s0)           # 示例：a、b、x 位于帧内偏移 0、4、8
+    lw    t1, 4(s0)
+    blt   t0, t1, .Lthen      # 比较 + 跳转二合一，无需存放比较结果
     j     .Lelse
 ```
 
@@ -121,10 +121,10 @@ store i32 %result, ptr %x
 ```
 
 ```asm
-    lw    t0, offset_a
-    lw    t1, offset_b
-    slt   t2, t0, t1          ; t2 = (a < b) ? 1 : 0
-    sw    t2, offset_x
+    lw    t0, 0(s0)
+    lw    t1, 4(s0)
+    slt   t2, t0, t1          # t2 = (a < b) ? 1 : 0
+    sw    t2, 8(s0)
 ```
 
 #### zext i1 → 直接使用比较结果
@@ -136,11 +136,11 @@ store i32 %result, ptr %x
 ```
 
 ```asm
-    ; 零扩展在寄存器层面就是同一表示，通常无需额外指令
-    mv    t1, t0              ; 直接复制
+    # 零扩展在寄存器层面就是同一表示，通常无需额外指令
+    mv    t1, t0              # 直接复制
 
-    ; 若语义是 "值为 0 时为真"，可用：
-    seqz  t1, t0              ; t1 = (t0 == 0) ? 1 : 0
+    # 若语义是 "值为 0 时为真"，可用：
+    seqz  t1, t0              # t1 = (t0 == 0) ? 1 : 0
 ```
 
 #### load / store
@@ -161,8 +161,8 @@ store i32 %val, ptr %ptr_val  ->   sw   src_reg, 0(dest_reg)
 ```
 
 ```asm
-    ; 栈帧布局时计算偏移，例如 x 在 fp-4
-    ; 使用时：lw t0, -4(fp)
+    # 栈帧布局时计算偏移，例如 x 在 fp-4
+    # 使用时：lw t0, -4(fp)
 ```
 
 ### 2.3 phi 消除
@@ -201,20 +201,19 @@ join:
 **算法 2 · phi 消除（Phi Elimination）**
 
 **输入（Input）：** 含 `phi` 指令的函数。
-**输出（Output）：** 不含 `phi` 的等价函数。
+**输出（Output）：** 不含 `phi` 的机器 IR，复制使用虚拟寄存器或栈槽；这一步不再输出要求保持 SSA 的 LLVM IR。
 
 ```
  1: eliminatePhi(func):
- 2:     for each block in func.blocks do
- 3:         for each phi in block.phis do
- 4:             dest = allocateLocation(phi.result);         // phi 结果的存放位置
- 5:             for each (value, pred) in phi.args do
- 6:                 // 在前驱块 pred 的终结指令之前插入复制
- 7:                 insertCopyBeforeTerminator(pred, value, dest);
- 8:             end for
- 9:             remove(phi);                                  // phi 本身不再生成
-10:         end for
-11:     end for
+ 2:     for each block B in func.blocks do
+ 3:         for each incoming edge (P -> B) do
+ 4:             copies = [(incomingValue(phi, P), phi.result) for phi in B.phis];
+ 5:             E = P;
+ 6:             if P has multiple successors then E = splitEdge(P, B); end if
+ 7:             insertParallelCopiesBeforeTerminator(E, copies);  // 只在该入边执行
+ 8:         end for
+ 9:         removeAllPhis(B);
+10:     end for
 ```
 
 **注意"并行拷贝"问题**：一个基本块入口可能有多条 `phi`，它们之间可能互相引用（例如 `phi1 = phi[phi2, ...]`、`phi2 = phi[phi1, ...]`），必须同时更新，否则会覆盖还没读完的值。解决办法是引入临时寄存器或临时槽，先全部读出、再全部写入：
@@ -232,16 +231,18 @@ join:
  5:             phi_args[phi.result].append((val, pred));
  6:         end for
  7:     end for
- 8:     for each pred in block.predecessors do
- 9:         for each (val, dest) whose edge comes from pred do
-10:             tmp = tempReg(pred);                          // 先写入临时，避免相互覆盖
-11:             emitCopy(val, tmp);
-12:             emitStore(tmp, slotOf(dest));
-13:         end for
-14:     end for
+ 8:     for each incoming edge (pred -> block) do
+ 9:         edge_block = ensureEdgeSpecificCopyBlock(pred, block);
+10:         staged = [];
+11:         for each (val, dest) whose edge comes from pred do
+12:             tmp = newDistinctTemporarySlot();             // 每一项有独立临时槽
+13:             emitCopy(edge_block, val, tmp); staged.append((tmp, dest));
+14:         end for                                            // 先读完所有原值
+15:         for each (tmp, dest) in staged do emitCopy(edge_block, tmp, dest); end for
+16:     end for                                                // 再写全部目的地
 ```
 
-**保守做法**：如果不想处理并行拷贝，也可以给每个 SSA 值都分配独立栈槽，让 `phi` 退化成"从前驱块写入槽、在入口读出槽"。实现更简单，但会产生较多 `lw` / `sw`，可以作为基线，之后再优化。
+使用栈槽也必须处理循环 `phi` 的交换与环形依赖：先读后写的两阶段复制不能省略。独立栈槽只简化位置分配，不会自动解决并行复制问题。
 
 ### 2.4 指令选择主循环
 
@@ -253,9 +254,9 @@ join:
 ```
  1: codegenInstruction(instr):
  2:     switch instr.opcode:
- 3:         case 'add':   emitBinary("add",  instr);  break;   // 算术
- 4:         case 'sub':   emitBinary("sub",  instr);  break;
- 5:         case 'mul':   emitBinary("mul",  instr);  break;
+ 3:         case 'add':   emitBinary("addw", instr);  break;   // 本分派器只处理 i32 算术
+ 4:         case 'sub':   emitBinary("subw", instr);  break;
+ 5:         case 'mul':   emitBinary("mulw", instr);  break;
  6:         case 'sdiv':  emitBinary("divw", instr);  break;
  7:         case 'srem':  emitBinary("remw", instr);  break;
  8:         case 'and':   emitBinary("and",  instr);  break;   // 位运算
@@ -283,10 +284,8 @@ join:
 
 ```
 emitBinary(mnemonic, instr):
-    lhs = resolve(instr.operand[0]);          // SSA 值 -> 实际位置（寄存器或栈槽）
-    rhs = resolve(instr.operand[1]);
-    loadToRegister(lhs, t0);
-    loadToRegister(rhs, t1);
+    loadValueIntoReservedScratch(instr.operand[0], t0);
+    loadValueIntoReservedScratch(instr.operand[1], t1); // 不得覆盖已经装入 t0 的左操作数
     emit(mnemonic + " t2, t0, t1");
     storeToLocation(t2, instr.result);        // 写回目标位置
 ```
@@ -304,14 +303,14 @@ flowchart LR
   R["返回值"] --> RA0["a0"]
 ```
 
-| 参数位置 | 整数参数 | 浮点参数 |
-| --- | --- | --- |
-| 第 1 个 | `a0` | `fa0` |
-| 第 2 个 | `a1` | `fa1` |
-| 第 3–8 个 | `a2–a7` | `fa2–fa7` |
-| 第 9 个起 | 溢出到栈 | 溢出到栈 |
+| 参数位置 | ToyC 的整数参数 |
+| --- | --- |
+| 第 1 个 | `a0` |
+| 第 2 个 | `a1` |
+| 第 3–8 个 | `a2–a7` |
+| 第 9 个起 | 8 字节栈参数槽，从调用时的 `0(sp)` 开始 |
 
-返回值：`a0`（整数）/ `fa0`（浮点）。此外还要遵守：栈 16 字节对齐、保存/恢复返回地址 `ra`、被调用者保存寄存器（`s0–s11`）。
+ToyC 的 `int` 返回值在 `a0`，32 位整数按 ABI 符号扩展到 XLEN。栈保持 16 字节对齐。扩展浮点时须另行实现 LP64D 浮点寄存器及回退到整数约定的规则，不能直接套用上面的整数计数表。
 
 ### 3.2 参数传递的实现
 
@@ -330,16 +329,15 @@ flowchart LR
  7:         loc = resolve(args[i]);
  8:         storeToCallArgArea(loc, i);
  9:     end for
-10:     // 3. 前 8 个参数放入 a0 ~ a7
-11:     for i = 0 to min(7, len(args) - 1) do
-12:         loadToRegister(resolve(args[i]), arg_reg[i]);   // arg_reg[i] = a0..a7
-13:     end for
-14:     emit("call " + func.name);                         // 4. 调用
-15:     emitPopLiveCallerSaved();                          // 5. 恢复调用者保存寄存器中的活跃值
-16:     // 6. 取返回值
-17:     if instr.result != none then
-18:         storeToLocation(a0, instr.result);              // 返回值在 a0
-19:     end if
+10:     // 3. 先保存所有实参值，再做并行搬运；a0/a1 交换时不得覆盖尚未读取的值
+11:     staged_args = stageArgumentValues(args);
+12:     emitParallelArgumentMoves(staged_args[0:8], a0..a7);
+13:     emit("call " + func.name);                         // 4. 调用
+14:     if instr.result != none then
+15:         returned = captureReturnValueBeforeRestore(a0); // 先保存返回值，防止恢复旧 a0 覆盖它
+16:     end if
+17:     emitPopLiveCallerSaved();                           // 恢复仍然活跃的旧值
+18:     if instr.result != none then storeToLocation(returned, instr.result); end if
 ```
 
 **溢出参数的具体做法**：
@@ -349,16 +347,16 @@ flowchart LR
 - `emitPushLiveCallerSaved` 与栈参数区共同使用一次对齐后的调用临时区，具体偏移由 `CallFrame` 记录，不能让两者互相覆盖。
 
 ```asm
-    ; 假设有 9 个整数参数 arg0 ~ arg8
-    ; arg0->a0, arg1->a1, ..., arg7->a7, arg8 溢出到栈
-    addi  sp, sp, -16        ; 分配溢出区（16 字节，容纳 arg8）
+    # 假设有 9 个整数参数 arg0 ~ arg8
+    # arg0->a0, arg1->a1, ..., arg7->a7, arg8 溢出到栈
+    addi  sp, sp, -16        # 分配溢出区（16 字节，容纳 arg8）
     lw    t0, offset_arg8
-    sw    t0, 0(sp)          ; arg8 溢出到 sp+0
+    sd    t0, 0(sp)          # arg8 已符号扩展，写入 8 字节参数槽
     lw    a0, offset_arg0
     lw    a1, offset_arg1
-    ; ... 其余参数 -> a2 ~ a7
+    # ... 其余参数 -> a2 ~ a7
     call  my_func
-    addi  sp, sp, 16         ; 回收溢出区
+    addi  sp, sp, 16         # 回收溢出区
 ```
 
 ### 3.3 extern 库函数调用
@@ -371,12 +369,12 @@ declare void @putint(i32)
 ```
 
 ```asm
-    ; x = getint()
-    call   getint            ; 返回值在 a0
-    sw     a0, offset_x      ; 存入变量槽
+    # x = getint()
+    call   getint            # 返回值在 a0
+    sw     a0, 8(s0)         # 示例：x 的帧内偏移为 8
 
-    ; putint(x)
-    lw     a0, offset_x      ; 参数放入 a0
+    # putint(x)
+    lw     a0, 8(s0)         # 参数放入 a0
     call   putint
 ```
 
@@ -464,6 +462,19 @@ flowchart TB
 
 序言必须保存 `ra` 和所有实际使用的被调用者保存寄存器（`s0–s11` 中的对应寄存器），尾声按相同槽位恢复后才能返回。只保存 `s0` 而在函数体内使用 `s1–s11` 会破坏调用者状态，属于错误实现。
 
+上述序言仅直接适用于立即数范围内的栈帧。`addi`、load/store 的偏移范围是 −2048..2047；例如 4096 字节栈帧不能发 `addi sp,sp,-4096`。通用发射器须检查每个立即数，超界时用保留 scratch 寄存器计算地址：
+
+```asm
+    li   t6, -4096
+    add  sp, sp, t6
+    li   t6, 3000
+    add  t6, sp, t6
+    sd   ra, 0(t6)        # 将 ra 保存到 3000(sp)
+    # 恢复时同样先计算地址，最后用 li/add 回收大栈帧
+```
+
+这些 scratch 寄存器不能同时分配给普通值；二元运算加载两个 spill 操作数时须使用不同 scratch。发射大偏移 store 时，地址 scratch 也不能覆盖待存的数据。参数栈区和调用者保存区同样需要范围检查。
+
 ### 4.4 溢出值的读写与调用点保存
 
 寄存器分配结果应为每个 SSA 值记录 `Register` 或 `StackSlot` 两类位置。值落在 spill 槽时，定义和使用必须显式插入内存访问：
@@ -486,24 +497,17 @@ define(v, r):
 
 ## 五、常量与数据段
 
-### 5.1 常量声明 `const int`
+### 5.1 常量表达式
 
-ToyC 不支持全局变量，`const int` 只能写在函数体内。它的值在编译期就已经确定，
-因此不必占用单独的存储单元：把值当成立即数用，或者直接折叠进表达式，生成的代码里就看不到这个变量了。
+由整数字面量组成的表达式可以在编译期求值，把结果作为立即数使用。局部 `const int` 表示初始化后不可赋值，初始值不一定在编译期已知；普通变量和局部常量的值能否传播，须由数据流分析判断。
 
 ```c
-const int LIMIT = 3;
-int x = LIMIT * 2 + 1;
+int x = 3 * 2 + 1;
 ```
 
 ```asm
-        li    t0, 7              ; 3 * 2 + 1 在编译期折叠为 7
+        li    t0, 7              # 3 * 2 + 1 在编译期折叠为 7
 ```
-
-:::tip[也可以当普通局部变量]
-像普通局部变量那样为它分配栈槽、写入初值同样正确（语言保证常量不会再被赋值），
-本部分后面的样例汇编就是这么处理的。两种做法任选一种，在报告里说明即可。
-:::
 
 ### 5.2 大型立即数（常量池）
 
@@ -521,7 +525,7 @@ big_const:
 
     .text
     la    t0, big_const
-    ld    t1, 0(t0)              ; t1 = 大常量
+    ld    t1, 0(t0)              # t1 = 大常量
 ```
 
 常量池是后端自己生成的只读数据，与源语言有没有全局变量无关。
@@ -559,7 +563,7 @@ global_var:
 ```asm
     .globl array
 array:
-    .zero 40                     ; 例如 10 个 int：10 * 4 = 40 字节
+    .zero 40                     # 例如 10 个 int：10 * 4 = 40 字节
 ```
 
 ## 六、输入输出规范与统一样例
@@ -569,12 +573,14 @@ array:
 - 输入为 ToyC 源代码，从标准输入流读入：
 
   ```bash
+  # 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
   echo "int main() { return 1; }" | ./compiler -asm > test.s
   ```
 
 - 本地调试时用文件重定向：
 
   ```bash
+  # 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
   ./compiler -asm < test.c > test.s
   ```
 
@@ -594,10 +600,13 @@ array:
 - 本地调试时把输出重定向到文件，再链接、运行：
 
   ```bash
+  # 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
+  # qemu-riscv64 命令也在此终端输入，由 QEMU 执行 RISC-V 程序
   ./compiler -asm < test.c > test.s
   riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
     -nostdlib -static test.s third_party/toyc/libtoyc.a -o test
-  ./test < test.in > test.out
+  # 在开发主机终端调用 QEMU，运行刚链接的 RISC-V 程序
+  qemu-riscv64 ./test < test.in > test.out
   ```
 
 ### 样例输入
@@ -627,8 +636,10 @@ void show(int v) {
 }
 
 int main() {
-    const int LIMIT = 3, STEP = 1;
-    int a = 5, b;
+    const int LIMIT = 3;
+    const int STEP = 1;
+    int a = 5;
+    int b;
     b = +a - -1;
     int c = (a + b) * 2 / 3 % 4;
     {
@@ -850,11 +861,11 @@ main_epilogue:
 再单独看一条赋值语句，理解"表达式求值 → 存回变量"的过程。源程序 `b = +a - -1;` 生成 5 条指令：
 
 ```asm
-        lw    t0, 16(s0)     ; t0 = a
+        lw    t0, 16(s0)     # t0 = a
         li    t1, 1
-        negw  t1, t1         ; t1 = -1（一元负号）
-        subw  t0, t0, t1     ; t0 = a - (-1)（一元正号不产生指令）
-        sw    t0, 24(s0)     ; b = t0
+        negw  t1, t1         # t1 = -1（一元负号）
+        subw  t0, t0, t1     # t0 = a - (-1)（一元正号不产生指令）
+        sw    t0, 24(s0)     # b = t0
 ```
 
 `+a` 是恒等运算，直接取 `a` 的值；`-1` 先装立即数再取负；`a >= b && b != 0 || !(a == LIMIT)` 这类短路表达式则用 `beq`/`bne` 跳过不求值的分支。
@@ -866,12 +877,15 @@ main_epilogue:
 ## 八、命令行与提交物
 
 ```bash
+# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
+# qemu-riscv64 命令也在此终端输入，由 QEMU 执行 RISC-V 程序
 cmake -S . -B build
 cmake --build build
 ./compiler -asm < input.c > input.s
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
   -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
-./input < input.in > result.out
+# 在开发主机终端调用 QEMU，运行刚链接的 RISC-V 程序
+qemu-riscv64 ./input < input.in > result.out
 ```
 
 必须提交可编译的完整文件：

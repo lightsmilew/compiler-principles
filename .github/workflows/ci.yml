@@ -26,8 +26,31 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      # onBrokenLinks 为 throw，构建失败即代表文档中存在失效链接
+      # 构建检查 MDX 语法、内部文档链接和锚点；外部 URL 另行核查
       - name: Build
         run: npm run build
-        env:
-          GITHUB_REPOSITORY: ${{ github.repository }}
+
+      - name: Verify rendered internal links and assets
+        run: python3 scripts/verify_tutorial.py --links-only
+
+  tutorial:
+    name: Execute tutorial examples
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install verification tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm-18 llvm mlir-18-tools qemu-user gdb-multiarch \
+            gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf gcc-riscv64-linux-gnu
+      - name: Verify shell, LLVM and assembly syntax
+        run: python3 scripts/verify_tutorial.py --snippets-only
+      - name: Verify ToyC examples and published Token output
+        run: python3 scripts/verify_toyc_examples.py
+      - name: Execute IR and arithmetic examples
+        run: python3 scripts/verify_codegen_examples.py
+      - name: Verify QEMU debugging commands
+        run: python3 scripts/verify_qemu_debugging.py
+      - name: Verify runtime archive
+        run: python3 runtime/test_runtime.py

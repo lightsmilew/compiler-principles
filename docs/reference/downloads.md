@@ -22,7 +22,7 @@ description: 汇总课程报告规范、ToyC 运行时库、SysY 语言规范及
 
 | 资源 | 格式 | 用途与下载链接 |
 | --- | --- | --- |
-| QEMU 本地调试指南 | PDF | [下载调试指南](pathname:///pdf/QEMU本地调试指南.pdf)，了解如何单步调试生成的 RISC-V 汇编 |
+| QEMU 本地调试指南 | PDF | [下载调试指南](pathname:///pdf/QEMU本地调试指南.pdf)，配套[在线指南](../guide/qemu-debugging)，了解如何单步调试生成的 RISC-V 汇编 |
 | SysY2022 语言定义 V1 | PDF | [下载语言定义](pathname:///pdf/SysY2022语言定义-V1.pdf)，查阅数据类型、语句和函数等语言规则 |
 | SysY2022 运行时库 V1 | PDF | [下载运行时库说明](pathname:///pdf/SysY2022运行时库-V1.pdf)，查阅竞赛运行时函数的接口 |
 | SysY2026 扩展规范 | PDF | [下载扩展规范](pathname:///pdf/Sysy2026.pdf)，查阅张量类型与矩阵乘法运算符等扩展 |

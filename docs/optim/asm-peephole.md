@@ -103,6 +103,7 @@ struct Rule {
 
 ```cpp
 bool match(Window w, const vector<Pattern>& pats) {
+    if (w.size() < pats.size()) return false;
     for (int i = 0; i < pats.size(); i++) {
         if (!match_one(w[i], pats[i])) return false;
     }

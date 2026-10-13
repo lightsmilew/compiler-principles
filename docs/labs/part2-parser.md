@@ -132,6 +132,8 @@ PrimaryExprTail -> '(' [ Expr (',' Expr)* ] ')'
 
 `AddExprTail`、`MulExprTail`、`PrimaryExprTail` 是预测分析器的辅助符号，分别记录加减运算、乘除运算和函数调用后缀。其余规则仍来自上面的 ToyC 文法。构造完整分析表时，`RelExpr`、`LAndExpr`、`LOrExpr` 也需要消除左递归，还需把 EBNF 的可选项和重复项展开为普通产生式。
 
+`if ... [else ...]` 的悬空 else 也会产生预测表冲突：消除左递归和左公因子并不能自动消除该冲突。手写递归下降在读到 else 时优先归属最近的 if；表驱动版本也需明确加入这条消歧规则，并在报告中说明，不能宣称原文法已经是无冲突的 LL(1)。
+
 #### FIRST 与 FOLLOW 表示什么
 
 - **FIRST**：这一部分可以从哪些 Token 开始？
@@ -459,8 +461,9 @@ flowchart LR
  3: while not eof() and lookahead() ∉ sync do
  4:     advance();                                     // 丢弃 Token，直到遇到同步符号
  5: end while
- 6: if lookahead() ∈ { ';', '}' } then advance(); end if  // 跳过直至同步符号
- 7: return current_position();                         // 继续解析后续语句
+ 6: if lookahead() == ';' then advance(); end if
+ 7: // '}' 留给外层块消费；恢复后退回适合当前 Token 的解析层级
+ 8: return current_position();                         // 继续解析后续语句
 ```
 
 例如语句解析失败后，跳过到 `;`、`}` 或控制语句关键字，再继续解析后续语句，减少同一错误引发的连续报错。
@@ -471,7 +474,7 @@ flowchart LR
 Program(functions)
 Function(return_type, name, params, body)
 Block(statements)
-Decl(name, initializer, is_const)     // 一条声明语句可含多个声明项，拆成一组节点
+Decl(name, initializer, is_const)     // 每条声明只有一个变量；局部 const 必须有初值
 If(condition, then_stmt, else_stmt?)
 While(condition, body)
 Empty / Break / Continue
@@ -497,12 +500,14 @@ AST 应丢弃不影响语义的括号和分隔符，但保留源位置，便于�
 - 输入为 ToyC 源代码，从标准输入流读入：
 
   ```bash
-  echo "int a = 1;" | ./compiler -ast > test.check-ast
+  # 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
+  echo "int main() { int a; a = 1; return a; }" | ./compiler -ast > test.check-ast
   ```
 
 - 本地调试时用文件重定向：
 
   ```bash
+  # 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
   ./compiler -ast < test.c > test.check-ast
   ```
 
@@ -575,8 +580,10 @@ void show(int v) {
 }
 
 int main() {
-    const int LIMIT = 3, STEP = 1;
-    int a = 5, b;
+    const int LIMIT = 3;
+    const int STEP = 1;
+    int a = 5;
+    int b;
     b = +a - -1;
     int c = (a + b) * 2 / 3 % 4;
     {
@@ -662,13 +669,14 @@ reject
 
 第 16 行缺少前一个函数的结束符 `}`，解析器因此将 `void g()` 作为 `f` 函数体中的语句处理，并在 `void` 处报错。
 报告错误后，应跳过 Token，直到语句级同步集合（`;`、`}`、`if`、`while`、`return`）中的符号，再继续解析。
-具体策略见“错误恢复”一节的 panic-mode 恢复。
+具体策略见“错误恢复”一节的 panic-mode 恢复。实现须保证每轮错误恢复推进 Token 或退出当前解析层级，避免反复在同一位置报错；报错行列与恢复后的错误数量可能随策略不同。
 
 ## 七、提交物
 
 第二部分必须提交可以编译的完整文件。程序应读取 ToyC 源程序，按命令行参数选择解析模式，并按第六节的规定输出 `accept` / `reject`；不能只提交算法片段。
 
 ```bash
+# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
 cmake -S . -B build
 cmake --build build
 ./compiler -ast < input.c > input.check-ast

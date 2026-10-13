@@ -120,7 +120,7 @@ flowchart TD
 
 ### Q：生成的汇编在本机跑不了？
 
-请确认使用的是统一规定的 RISC-V64GC 工具链，并指定 `-march=rv64gc` 与
+在 x86-64 / ARM64 的 WSL 或 Ubuntu 开发主机中，生成的 RISC-V 文件必须通过 `qemu-riscv64 ./input` 运行；直接执行 `./input` 仅适用于 RISC-V 系统（例如已登录的 QEMU 虚拟机）。同时确认链接工具链指定 `-march=rv64gc` 与
 `-mabi=lp64d`。最终链接时还要加入 ToyC 运行时静态库 `libtoyc.a`，
 否则 `getint` 或 `putint` 等外部符号会解析失败。
 
@@ -133,4 +133,4 @@ flowchart TD
 
 ### Q：PR 被合并后还能改吗？
 
-可以，用新的 commit 推送到同一分支，PR 会自动更新。
+已合并的 PR 不会因新的提交重新打开。应从更新后的 `main` 创建新分支并提交新 PR；尚未合并的 PR 才会随着同一分支的新提交更新。

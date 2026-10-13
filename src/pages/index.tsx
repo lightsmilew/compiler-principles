@@ -44,12 +44,8 @@ export default function Home(): ReactNode {
       <main className={styles.home}>
         <header className={styles.hero}>
           <div className={styles.container}>
-            <svg className={styles.heroLines} viewBox="0 0 1400 700" fill="none" aria-hidden="true">
-              <g stroke="currentColor" strokeWidth="1">
-                <path d="M-50 540C250 640 420 210 1400 120M-50 562C250 650 470 230 1400 145M-50 584C250 660 520 250 1400 170M-50 606C250 670 570 270 1400 195M-50 628C250 680 620 290 1400 220M-50 650C250 690 670 310 1400 245" />
-              </g>
-            </svg>
-            <div className={styles.heroIntro}>
+            <div className={styles.heroGrid}>
+              <div className={styles.heroIntro}>
                 <Heading as="h1" className={styles.title}>写个编译器，<br /><span>看看代码怎么跑。</span></Heading>
                 <p className={styles.subtitle}>从 ToyC 源码到 RISC-V 汇编，动手实现一个编译器。</p>
                 <div className={styles.actions}>
@@ -57,8 +53,9 @@ export default function Home(): ReactNode {
                   <Link className={styles.secondaryButton} to="/docs/guide/environment">搭建开发环境 <Arrow diagonal /></Link>
                 </div>
                 <div className={styles.heroMeta}><span><strong>06</strong> 个实验部分</span><span><strong>60</strong> 建议课时</span><span>目标平台 RV64GC</span></div>
+              </div>
+              <div className={styles.showcaseWrap}><CompilerShowcase /></div>
             </div>
-            <div className={styles.showcaseWrap}><CompilerShowcase /></div>
             <div className={styles.techStrip}><span>语言与工具</span><div><span>ToyC</span><i /><span>C / C++ · Java · Rust</span><i /><span>IR</span><i /><span>RISC-V 64GC</span><i /><span>QEMU</span></div><span className={styles.stripNote}>源码 → 中间表示 → 汇编</span></div>
           </div>
         </header>

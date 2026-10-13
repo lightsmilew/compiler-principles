@@ -23,19 +23,16 @@ description: 在编译期直接计算常量表达式，并沿 SSA Use-Def 链替
 
 实现时为每条指令尝试求值：操作数都是常量时直接算结果，否则保持原样。
 
-```cpp
-Constant* try_fold(Instruction* I) {
-    if (!all_of(I->operands(), is_const)) return nullptr;
-    switch (I->op) {
-        case Op::Add: return ConstInt::get(lhs + rhs);
-        case Op::Mul: return ConstInt::get(lhs * rhs);
-        case Op::ICmp: return ConstInt::get(lhs.icmp(rhs));
-        // ... 其它指令
-    }
-}
+```text
+tryFold(I):
+    if I has no result or not allOperandsConstant(I): return none;
+    if I.opcode == phi: return sameConstantOnAllIncomingEdges(I);
+    if I.opcode not in supportedFoldOpcodes: return none;
+    return evaluateTargetWidth(I.opcode, I.type, I.flags, I.operands);
+    // evaluateTargetWidth 返回 Constant 或 none，不能调用未知函数或读取内存
 ```
 
-注意：带溢出语义的 `sadd_with_overflow` 等需要额外标志位的指令，ToyC 通常不实现，直接交由后端处理。
+常量折叠必须使用目标位宽的整数运算，不能直接在 C++ 的有符号 `int` 上计算可能溢出的 `lhs + rhs`。还须处理除零、`INT_MIN / -1` 和 LLVM 的 `nsw` / `nuw` 标志；带溢出结果的 intrinsic 不能按普通加法折叠。初版遇到无法证明安全的情况应保留原指令。
 
 ## 二、常量传播（Constant Propagation）
 
@@ -43,7 +40,7 @@ Constant* try_fold(Instruction* I) {
 
 ```text
 const[v] = c
-当 v = f(const[a], const[b]) 且 f 是纯函数时，const[f(a,b)] = eval(f, c, d)
+若 const[a]=c、const[b]=d，且 v=f(a,b) 可按目标语义求值，则 const[v]=eval(f,c,d)
 ```
 
 构造常量表的过程：
@@ -51,7 +48,7 @@ const[v] = c
 **算法 · 常量传播（Constant Propagation）**
 
 **输入（Input）：** 函数 IR。
-**输出（Output）：** 已知常量的 SSA 值集合 `const`。
+**输出（Output）：** 改写后的 IR 与 changed 标志；const 表是分析过程的内部结果。
 
 ```
  1: propagateConstants(func):
@@ -62,14 +59,17 @@ const[v] = c
  6:     repeat
  7:         changed = false;
  8:         for each I in func do
- 9:             if I.result ∉ const and allOperandsIn(I, const) and isPure(I) then
-10:                 const[I.result] = evaluate(I.opcode, operands(I));           // 编译期求值
-11:                 changed = true;
+ 9:             if I has a result and I.result ∉ const and allValueOperandsIn(I, const) and isSupportedFoldOpcode(I) then
+10:                 value = tryEvaluateWithKnownConstants(I, const);            // 失败返回 none
+11:                 if value != none then const[I.result] = value; changed = true; end if
 12:             end if
 13:         end for
 14:     until not changed
-15:     for each v in const do replaceAllUsesWith(v, const[v]); end for
-16:     return const;
+15:     changedIR = false;
+16:     for each non-literal value v in const do
+17:         if hasUses(v) then replaceAllUsesWith(v, const[v]); changedIR = true; end if
+18:     end for
+19:     return changedIR; // 仅当实际改写 use 时为 true；常量表可另行返回
 ```
 
 例如：
@@ -84,7 +84,7 @@ ret i32 %y               ; 用 %y 的常量值替换 → ret i32 20
 
 ## 三、复制传播（Copy Propagation）
 
-SSA 中的复制形如 `x = y`（或 LLVM 里的 `%t = add i32 %y, 0` / `%t = bitcast %y to i32`）。
+自定义 IR 中的复制形如 `x = y`，LLVM IR 中可见等价形式 `%t = add i32 %y, 0`。LLVM 的 `bitcast` 必须写明源类型，例如 `%t = bitcast i32 %y to i32`；不能省略 `i32`。
 把 `x` 替换为 `y` 通常能让 `y` 直接被后续优化看到：
 
 ```llvm
@@ -101,7 +101,7 @@ SSA 中的复制形如 `x = y`（或 LLVM 里的 `%t = add i32 %y, 0` / `%t = bi
 %t2 = mul i32 %x, 3
 ```
 
-两次 `mul` 的左操作数相同，可能触发后续的 CSE。
+这里两次 `mul` 的乘数不同，不能通过 CSE 合并；复制传播只是移除了中间副本。只有操作码、类型、语义标志和全部操作数一致的纯计算才是直接的 CSE 候选。
 
 ## 四、代数恒等式
 
@@ -115,12 +115,12 @@ SSA 中的复制形如 `x = y`（或 LLVM 里的 `%t = add i32 %y, 0` / `%t = bi
 | `x - x` | `0` |
 | `x ^ x` | `0` |
 | `x & 0` | `0` |
-| `x | -1` | `-1`（全 1） |
+| `x \| -1` | `-1`（全 1） |
 | `x == x` | `true`（非 NaN 类型） |
 | `x != x` | `false` |
 
 这套规则对整数和浮点语义略有差异（比如 IEEE 754 下 `x - x = NaN`，要谨慎处理），
-ToyC 只支持整数，可以放心应用。
+ToyC 只支持整数，仍须区分源语言与 IR 的位宽、溢出标志以及 `undef` / `poison` 语义。消除某个值的使用不能顺带删除为求值该操作数而执行的 I/O 或其它副作用。
 
 ## 五、迭代执行顺序
 
@@ -163,7 +163,7 @@ flowchart TB
 
 | 陷阱 | 解释 |
 | --- | --- |
-| 浮点 NaN / 溢出 | 整数算术总是良定义的；浮点要考虑 IEEE 754 的异常语义 |
+| 整数溢出 / 除零 | 源语言有符号溢出、除零及 `INT_MIN / -1` 不是正常结果；IR 折叠要按位宽和标志处理 |
 | 函数调用操作数 | 调用 `f(const)` 不能折叠——可能改变函数行为（如 `f` 读全局） |
 | `phi` 节点 | 必须所有入边常量一致才能传播 |
 

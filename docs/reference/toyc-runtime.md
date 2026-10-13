@@ -45,6 +45,8 @@ int main() {
 适用于运行单个静态 ELF 文件：
 
 ```bash
+# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
+# qemu-riscv64 命令也在此终端输入，由 QEMU 执行 RISC-V 程序
 # 1. 编译 ToyC 源代码 → 汇编
 ./compiler -asm < input.c > input.s
 
@@ -52,41 +54,56 @@ int main() {
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
   -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
 
-# 3. 运行（qemu-user）
+# 3. 在开发主机终端调用 qemu-user，执行 RISC-V 程序
 qemu-riscv64 ./input < input.in
 ```
 
 **方式二：qemu-system 完整虚拟机**
 
-需要完整的 Linux 开发环境时，启动 QEMU 虚拟机：
+需要完整的 RISC-V Linux 环境时，可以使用已经准备好的 Ubuntu RISC-V 镜像启动 QEMU 虚拟机。下面按“开发主机启动 → 开发主机传文件并登录 → 虚拟机内运行”的顺序执行；开发主机与虚拟机的文件目录各自独立。磁盘格式检查与调试步骤见 [QEMU 调试指南](../guide/qemu-debugging)。
 
 ```bash
-# 启动虚拟机
+# 执行位置：WSL / Ubuntu 开发主机终端 A
+# 在镜像所在目录启动；镜像文件名和 U-Boot 路径按实际安装位置调整
+# 保持此终端运行 QEMU，后续传文件与 SSH 命令在另一个开发主机终端输入
+# 此处磁盘已转换为 raw 格式，且已配置登录账号与 SSH
 qemu-system-riscv64 \
   -machine virt \
-  -cpu rv64gc \
+  -cpu rv64 \
   -nographic -m 4G -smp 4 \
   -kernel /usr/lib/u-boot/qemu-riscv64_smode/uboot.elf \
   -device virtio-net-device,netdev=eth0 \
-  -netdev user,id=eth0,hostfwd=tcp::2222-:22 \
+  -netdev user,id=eth0,hostfwd=tcp:127.0.0.1:2222-:22 \
   -device virtio-rng-pci \
   -drive file=ubuntu-24.04-riscv64.img,format=raw,if=virtio
 ```
 
-SSH 连接后，在虚拟机内编译运行：
+等待虚拟机启动且 SSH 服务可用后，打开另一个开发主机终端，进入编译器项目根目录，传入前面生成的汇编、测试输入和运行时库，再登录。下面使用 `ubuntu` 账号，实际账号与密码以镜像配置为准。
 
 ```bash
-# 账号 ubuntu，密码 ubuntu（首次登录需修改密码）
+# 执行位置：WSL / Ubuntu 开发主机终端 B（编译器项目根目录）
+# 将文件复制到虚拟机中 ubuntu 用户的主目录
+scp -P 2222 input.s input.in third_party/toyc/libtoyc.a ubuntu@localhost:~/
+# 此命令在开发主机输入；登录成功后，当前终端进入 QEMU 虚拟机
 ssh -p 2222 ubuntu@localhost
+```
 
-# 首次登录后安装编译工具
+登录成功后，在 SSH 会话中执行：
+
+```bash
+# 执行位置：QEMU 虚拟机内的 RISC-V Ubuntu 终端（SSH 登录后）
+# 首次登录后安装虚拟机内的编译工具
 sudo apt-get update
 sudo apt-get install gcc gdb
 
-# 编译运行
-riscv64-linux-gnu-gcc -march=rv64gc -mabi=lp64d \
+# 进入接收文件的目录，使用虚拟机内的原生 RISC-V GCC 链接
+cd ~
+gcc -march=rv64gc -mabi=lp64d \
   -nostdlib -static input.s libtoyc.a -o input
+# 在 RISC-V 虚拟机内直接运行目标程序
 ./input < input.in
+# 结束 SSH 会话，返回开发主机终端 B；终端 A 中的 QEMU 继续运行
+exit
 ```
 
 **脚本中的关键链接参数**：
@@ -94,7 +111,7 @@ riscv64-linux-gnu-gcc -march=rv64gc -mabi=lp64d \
 | 参数 | 说明 |
 |---|---|
 | `-march=rv64gc` | 生成 RV64GC 指令|
-| `-mabi=lp64d` | 使用 LP64D ABI（64 位整数 + 双精度浮点） |
+| `-mabi=lp64d` | 使用 LP64D ABI（long/指针为 64 位，int 为 32 位，硬浮点调用约定） |
 | `-nostdlib -static` | 不链接标准库，静态链接运行时库 |
 | `third_party/toyc/libtoyc.a` | ToyC 运行时库 |
 

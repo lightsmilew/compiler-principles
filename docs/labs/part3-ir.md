@@ -136,7 +136,6 @@ Symbol {
     name: string
     address: Value                      // alloca 产生的地址（alloca/load/store 模式）
     // 或者：value: Value               // SSA 模式（已做 mem2reg，见第五部分）
-    is_constant: bool
     scope_level: int                    // 所在作用域深度
 }
 ```
@@ -233,12 +232,14 @@ LoopContext { head: BasicBlock, exit: BasicBlock }
  4:     ctx.current_block = fn.newBlock("entry");
  5:     ctx.symbol_table.pushScope();
  6:     bindParameters(func_ast.params, fn.arguments);   // 形参 -> alloca + store
- 7:     emitStmt(func_ast.body);                          // 递归生成函数体
- 8:     if func_ast.return_type == int then               // 保证基本块有终结指令
- 9:         emitImplicitReturn(fn);                        // 语义检查保证所有路径有 return
-10:     end if
-11:     ctx.symbol_table.popScope();
-12:     verify(fn);                                        // 检查每个块都有终结指令
+ 7:     emitFunctionBodyInCurrentScope(func_ast.body);    // 最外层与形参共用作用域
+ 8:     if current block has no terminator then
+ 9:         if block is unreachable then emitUnreachable();
+10:         else if func_ast.return_type == void then emitRetVoid();
+11:         else error("int 函数存在可达的无返回出口"); end if
+12:     end if
+13:     ctx.symbol_table.popScope();
+14:     verify(fn);                                        // 检查每个块都有终结指令
 ```
 
 ### 4.1 分支目标的两种策略
@@ -255,11 +256,11 @@ LLVM IR 的分支目标必须在基本块创建后确定，因此有两种实现
 ```
  1: emitStmt(If(cond, then_stmt, else_stmt)):
  2:     then_lbl = newLabel();  else_lbl = newLabel();  end = newLabel();
- 3:     emitCond(cond, then_lbl, else_lbl);        // 条件求值并跳转，见算法 8
- 4:     emitLabel(then_lbl);  emitStmt(then_stmt);  emitBr(end);
+ 3:     emitCond(cond, then_lbl, else_lbl);        // 条件求值并跳转，见算法 6
+ 4:     emitLabel(then_lbl);  emitStmt(then_stmt);  emitBrIfUnterminated(end);
  5:     emitLabel(else_lbl);
  6:     if else_stmt != none then emitStmt(else_stmt); end if
- 7:     emitBr(end);
+ 7:     emitBrIfUnterminated(end);
  8:     emitLabel(end);
 ```
 
@@ -292,7 +293,7 @@ fillTarget(label_name, block):                     // 目标块创建后调用
 
 ## 五、表达式转换
 
-表达式访问器 `emit_expr` 返回一个 LLVM `Value`；短路逻辑等无法直接产生值的情况改用 `emit_cond`（接收真/假两个目标块，不返回值）。
+表达式访问器 `emitExpr` 返回计算结果；条件上下文用 `emitCond` 跳向真/假两个目标。`&&` / `||` 出现在赋值、实参或 return 中时，先短路求值，再把分支结果合并为 i32 的 0 或 1。Module、Value、Builder 表示自行实现的数据结构与接口。
 
 **算法 5 · 表达式生成的通用结构（emit_expr）**
 
@@ -305,10 +306,11 @@ fillTarget(label_name, block):                     // 目标块创建后调用
  3:         Number(n):            return Constant(n, i32);        // 常量，无需加载
  4:         Variable(name):       return loadVar(lookup(name));   // 从内存/SSA 取值
  5:         Unary(op, x):         return emitUnary(op, emitExpr(x));
- 6:         Binary(op, l, r):     return emitBinary(op, emitExpr(l), emitExpr(r));
- 7:         Relation(l, op, r):   return zext(emitICmp(op, emitExpr(l), emitExpr(r)));  // i1 -> i32
- 8:         Call(name, args):     return emitCall(name, map(emitExpr, args));
- 9:     end match
+ 6:         And/Or:              return emitBooleanValue(e);      // 分支短路后合成为 i32 的 0/1
+ 7:         Binary(op, l, r):     return emitBinary(op, emitExpr(l), emitExpr(r));
+ 8:         Relation(l, op, r):   return zext(emitICmp(op, emitExpr(l), emitExpr(r)));  // i1 -> i32
+ 9:         Call(name, args):     return emitCall(name, map(emitExpr, args));
+10:     end match
 ```
 
 ### 5.1 一元表达式
@@ -317,7 +319,7 @@ fillTarget(label_name, block):                     // 目标块创建后调用
 emitUnary(op, v):
     if op == '+': return v;                       // 不变 / identity
     if op == '-': return emit(neg, v);
-    if op == '!': return emit(xor, v, 1);         // 逻辑非：0/1 取反
+    if op == '!': return zext(emitICmp(eq, v, Constant(0, i32)));  // 任意整数：!0=1，!非零=0
 ```
 
 ```llvm
@@ -342,8 +344,8 @@ emitUnary(op, v):
 
 | 表达式类型 | `emit_expr` | `emit_cond` 的跳转行为 |
 | --- | --- | --- |
-| 逻辑与 `a && b` | — | 若 `a` 为假 → 跳假出口；否则继续求值 `b` |
-| 逻辑或（`a`、`b` 用两个竖线连接） | — | 若 `a` 为真 → 跳真出口；否则继续求值 `b` |
+| 逻辑与 `a && b` | 短路控制流合成 `i32` 的 0/1 | 若 `a` 为假 → 跳假出口；否则继续求值 `b` |
+| 逻辑或（`a`、`b` 用两个竖线连接） | 短路控制流合成 `i32` 的 0/1 | 若 `a` 为真 → 跳真出口；否则继续求值 `b` |
 | 关系表达式 `a < b` | 返回 SSA 值 | 比较后直接跳真/假出口 |
 
 **算法 6 · 条件生成与短路（emit_cond with Short-Circuit）**
@@ -367,10 +369,11 @@ emitUnary(op, v):
 13:         Relation(l, op, r):
 14:             cmp = emitICmp(op, emitExpr(l), emitExpr(r));   // cmp 是 i1 SSA 值
 15:             emitBrCond(cmp, true_lbl, false_lbl);
-16:         Variable(name):
-17:             cmp = emitICmp(ne, emitExpr(Variable(name)), Constant(0, i32));  // 非零为真
-18:             emitBrCond(cmp, true_lbl, false_lbl);
-19:     end match
+16:         Not(value):      emitCond(value, false_lbl, true_lbl);  // 交换真/假出口
+17:         other integer expression:                             // 常量、调用、算术等
+18:             cmp = emitICmp(ne, emitExpr(expr), Constant(0, i32)); // 非零为真
+19:             emitBrCond(cmp, true_lbl, false_lbl);
+20:     end match
 ```
 
 短路图示（`x = a && b;`）：
@@ -406,6 +409,20 @@ end:
 
 
 
+### 5.4 短路表达式产生数值
+
+```text
+emitBooleanValue(e):
+    trueBlock = newBlock(); falseBlock = newBlock(); merge = newBlock();
+    resultSlot = createEntryAlloca(i32);
+    emitCond(e, trueBlock, falseBlock);
+    selectBlock(trueBlock); store(i32 1, resultSlot); br(merge);
+    selectBlock(falseBlock); store(i32 0, resultSlot); br(merge);
+    selectBlock(merge); return load(i32, resultSlot);
+```
+
+这是内存形式 IR 的实现；mem2reg 可将该栈槽提升成 `phi i32 [1, trueBlock], [0, falseBlock]`。语句块在发出 `return` / `break` / `continue` 后，不得再向同一已终结块追加指令；后续源语句可单独检查，但不生成可达指令。
+
 ## 六、语句转换
 
 **算法 7 · 变量声明与赋值（VarDecl / Assign）**
@@ -414,25 +431,22 @@ end:
 **输出（Output）：** `alloca`、初始化 `store` 及赋值 `store`。
 
 ```
- 1: emitStmt(VarDecl(items)):
- 2:     for item in items do
- 3:         ctx.symbol_table.declare(item.name, alloca(i32));   // 先登记名字，分配栈槽
- 4:     end for
- 5:     for item in items do
- 6:         if item.initializer != none then
- 7:             val = emitExpr(item.initializer);
- 8:         else
- 9:             val = Constant(0, i32);                          // 无初始化则默认 0
-10:         end if
-11:         emitStore(val, lookupAddress(item.name));
-12:     end for
-13:
-14: emitStmt(Assign(name, value_ast)):
-15:     emitStore(emitExpr(value_ast), lookupAddress(name));
+ 1: emitStmt(VarDecl(name, initializer, is_const)):
+ 2:     if is_const then require(initializer != none); end if  // 局部常量必须有初值
+ 3:     address = createEntryAlloca(i32);                       // 栈槽放在函数入口，循环内不重复分配
+ 4:     ctx.symbol_table.declare(name, address);                // 声明点开始可见
+ 5:     if initializer != none then
+ 6:         val = emitExpr(initializer);                       // 初始化表达式只求值一次
+ 7:         emitStore(val, address);                            // store 留在实际声明位置
+ 8:     end if                                                 // 无初值时只分配槽位
+ 9:
+10: emitStmt(Assign(name, value_ast)):
+11:     emitStore(emitExpr(value_ast), lookupAddress(name));
 ```
 
 ```c
-int x, y = a + 1;
+int x = 0;
+int y = a + 1;
 ```
 
 ```llvm
@@ -484,11 +498,11 @@ end:
  1: emitStmt(While(cond, body)):
  2:     head = newLabel();  body_lbl = newLabel();  exit = newLabel();
  3:     ctx.loop_stack.push(LoopContext(head, exit));      // 供 break/continue 使用
- 4:     emitLabel(head);
+ 4:     emitBrIfUnterminated(head);  emitLabel(head);      // 当前块先跳到循环条件
  5:     emitCond(cond, body_lbl, exit);                     // 条件为真进循环，否则退出
  6:     emitLabel(body_lbl);
  7:     emitStmt(body);
- 8:     emitBr(head);                                       // 回到条件入口
+ 8:     emitBrIfUnterminated(head);                          // return/break/continue 后不重复加终结指令
  9:     emitLabel(exit);
 10:     ctx.loop_stack.pop();
 11:
@@ -523,16 +537,12 @@ flowchart TD
 ```llvm
 declare i32 @getint()
 declare void @putint(i32)
-declare i32 @getch()
-declare void @putch(i32)
 ```
 
 ```
 declareExternalFunctions(module):
     module.declare("getint",  i32,  []);
     module.declare("putint",  void, [i32]);
-    module.declare("getch",   i32,  []);
-    module.declare("putch",   void, [i32]);
 ```
 
 函数调用按从左到右生成实参（保留副作用顺序）：
@@ -548,30 +558,23 @@ putint(add(a, b));
     call void @putint(i32 %sum)
 ```
 
-## 八、常量与全局变量（扩展）
+## 八、常量折叠与全局变量扩展
 
-ToyC 不支持全局变量：`CompUnit` 只由函数定义组成，变量和常量都声明在函数体内。
+ToyC 不支持全局变量：`CompUnit` 只由函数定义组成。普通局部变量可以省略初始化，局部 `const int` 必须初始化；没有初值的局部变量不能自动写成 0。
 因此 IR 的顶层只有外部函数声明与函数定义，不会出现 `@g = global ...` 这样的全局对象。
 
-需要特别处理的是 `const int`：
+常量表达式可以直接求值；普通变量的初始值是否可向后传播，还要检查后续赋值和控制流：
 
 ```c
-const int LIMIT = 3;
-int x = LIMIT * 2 + 1;
+int x = 3 * 2 + 1;
 ```
 
-`const` 的值在编译期就是已知的，推荐在语义分析阶段把它记进符号表并直接常量折叠，
-于是 IR 里根本不出现这个变量：
+这里的乘加全部由整数字面量组成，可以在编译期折叠，保留变量 `x` 的存储语义：
 
 ```llvm
     %x = alloca i32
     store i32 7, ptr %x            ; 3 * 2 + 1 在编译期折叠为 7
 ```
-
-:::tip[也可以当普通局部变量]
-不区分 `const` 与普通局部变量，照常 `alloca` + `store` 写入初值，语义上同样正确——语言保证常量不会再被赋值。
-两种做法都可以，在报告里说明即可。
-:::
 
 :::info[扩展到全局变量（可选）]
 若你在后续实验里自行扩展了全局变量（SysY 支持），可以参考下面的写法生成；ToyC 的评测用例不会用到：
@@ -596,11 +599,11 @@ entry:
 
 ## 九、内存访问型 IR 与 mem2reg（详见第五部分）
 
-第三部分只要求把 ToyC 的局部变量统一降低到 `alloca` / `load` / `store`：每个变量占一块栈空间，声明处发 `alloca`，赋值处发 `store`，读取处发 `load`。
+第三部分只要求把 ToyC 的局部变量统一降低到 `alloca` / `load` / `store`：每个变量在函数入口预留一块栈空间，声明初始化或赋值处发 `store`，读取处发 `load`。
 
 这种表示中，局部变量具有固定的栈地址，通过 `load` 和 `store` 读写；控制流汇合处无需为这些变量插入 `phi`。实现时应检查地址计算、读写位宽与分支目标是否正确。
 
-代价是变量始终保存在栈上，每次读写都要访问内存，寄存器只负责在 `load` / `store` 之间传递数据，无法承载计算；同时 `load` 得到的是内存中的值而非某条指令的结果，会切断 SSA 的 Use-Def 链，之后的常量传播、公共子表达式消除与死代码消除都难以进行。
+代价是局部变量读写产生更多内存指令。`load` 的结果仍是 SSA 值，后续算术也在这些值上计算；但 load/store 之间的内存依赖不能仅从普通 Use-Def 链推导。mem2reg 将符合条件的局部标量提升为 SSA 值，使数值关系更直接，也减少后端访存。
 
 ```llvm
 ; 内存访问型 IR：变量在栈上

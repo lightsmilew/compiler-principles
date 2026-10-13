@@ -19,9 +19,9 @@ description: 在后端把乘常量替换为等价的移位与加法，主要作�
 | --- | --- | --- |
 | `mulw t0, t1, t2`（`t2 = 2^k`） | `slliw t0, t1, k` | ToyC 的 32 位乘 2 的幂换成 32 位移位 |
 
-乘数是常量且能拆成少数几个 2 的幂时同样可以拆解（例如 `x * 7` 写成 `(x << 3) - x`）；乘数是负数时先按它的绝对值替换，最后取负（`subw t0, zero, t0`）。这些替换与操作数的正负无关：`x * 2^k` 与 `x << k` 在 ToyC 的 32 位补码语义下结果一致。
+乘数是常量且能拆成少数几个 2 的幂时同样可以拆解（例如 `x * 7` 写成 `(x << 3) - x`）；乘数是负数时先按它的绝对值替换，最后取负（`subw t0, zero, t0`）。在无额外溢出标志的 i32 IR 和机器 W 指令层，二者的低 32 位一致，移位量须满足 `0≤k<32`。源语言有符号溢出没有规定的正常结果，不能据此把对负数的移位直接写成 C 源码替换。
 
-除法不能照搬这个思路。`div` 是向零截断的有符号除法，`srli`（逻辑右移）与 `srai`（向下取整的算术右移）在负数上都不等于 `div`，`rem` 也没有等价的单条指令。除数是编译期常量时，改由 [强度削减（魔数法）](ir-strength-reduction) 把 `div` / `rem` 换成"乘魔数 + 移位"，后端不做这类替换。
+除法不能照搬这个思路。`divw` 是向零截断的有符号除法，`srli`（逻辑右移）与 `srai`（向下取整的算术右移）在负数上都不等于 `div`，`rem` 也没有等价的单条指令。除数是编译期常量时，改由 [强度削减（魔数法）](ir-strength-reduction) 把 `div` / `rem` 换成"乘魔数 + 移位"，后端不做这类替换。
 
 ## 二、常量传播是前置条件
 
@@ -69,7 +69,7 @@ flowchart LR
   end
 ```
 
-每轮迭代省下一条 `slliw`，迭代次数越多收益越大。循环展开会进一步放大这类收益：把两轮迭代合到一轮后，每轮只需给 `j` 加 4，乘法在循环体中的比例更低。
+本例把每轮一条 `slliw` 换成一条 `addiw`，并新增活跃变量；指令数并未自动减少，收益需要测量。循环展开会进一步放大这类收益：把两轮迭代合到一轮后，每轮只需给 `j` 加 4，乘法在循环体中的比例更低。
 
 ## 四、归纳变量检测
 
@@ -121,12 +121,15 @@ flowchart LR
 | 乘数不是常量 | 运行期才能确定的乘数无法拆成移位，不要匹配这类指令 |
 | 位宽 | 目标平台是 RV64，但 `int` 是 32 位，乘移位要用 32 位语义（`mulw` / `slliw`，变量移位时用 `sllw`） |
 | 常量拆解过长 | `c` 的 2 的幂分解项数多于直接乘法时不再划算，规则中应设一个上限 |
-| 指令延迟 | RISC-V 上 `mul` 的延迟是加法、移位的数倍，`div` 更高，替换乘法的收益明显 |
-| 活跃区间变化 | 新增派生归纳变量会改变活跃区间，必须在寄存器分配之前完成 |
+| 指令延迟 | ISA 不规定周期数；依据目标处理器或评测环境实测延迟，不能断言移位一定快于乘法 |
+| 活跃区间变化 | 新增派生归纳变量会改变活跃区间，必须重新分配寄存器 |
+| 额外的归纳更新 | 退出前最后一次 j 更新也可能溢出；新增 IR 运算不得盲目带 nsw/nuw，或需证明额外更新的范围 |
 
 ## 七、测试
 
 ```bash
+# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
+# qemu-riscv64 命令也在此终端输入，由 QEMU 执行 RISC-V 程序
 # 生成带循环的 ToyC 输入（注意 ToyC 没有 for，用 while）
 cat > loop.c <<EOF
 int main() {
@@ -154,21 +157,49 @@ riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
   -nostdlib -static loop.opt.s third_party/toyc/libtoyc.a -o loop.opt
 
-# 同一组输入，两个可执行文件的输出必须完全一致
-echo 10000 | ./loop     > loop_result.out
-echo 10000 | ./loop.opt > loop_result_opt.out
+# 在开发主机终端调用 qemu-user；同一组输入的输出必须完全一致
+echo 10000 | qemu-riscv64 ./loop     > loop_result.out
+echo 10000 | qemu-riscv64 ./loop.opt > loop_result_opt.out
 diff loop_result.out loop_result_opt.out
+```
 
-# 如需完整虚拟机环境，使用 qemu-system 启动
+完整虚拟机是另一种运行方式，需要事先准备 Ubuntu RISC-V 镜像。若选择此方式，在开发主机启动 QEMU：
+
+```bash
+# 执行位置：WSL / Ubuntu 开发主机终端 A
+# 在镜像所在目录启动；镜像文件名和 U-Boot 路径按实际安装位置调整
+# 保持此终端运行 QEMU，SSH 登录在另一个开发主机终端进行
+# 此处磁盘已转换为 raw 格式，且已配置登录账号与 SSH
 qemu-system-riscv64 \
   -machine virt \
-  -cpu rv64gc \
+  -cpu rv64 \
   -nographic -m 4G -smp 4 \
   -kernel /usr/lib/u-boot/qemu-riscv64_smode/uboot.elf \
   -device virtio-net-device,netdev=eth0 \
-  -netdev user,id=eth0,hostfwd=tcp::2222-:22 \
+  -netdev user,id=eth0,hostfwd=tcp:127.0.0.1:2222-:22 \
   -device virtio-rng-pci \
   -drive file=ubuntu-24.04-riscv64.img,format=raw,if=virtio
+```
+
+后续文件传输、SSH 登录与虚拟机内运行步骤见 [ToyC 运行时库](../reference/toyc-runtime#编译与运行)。运行 `loop` 和 `loop.opt` 时，将上面生成的这两个可执行文件复制到虚拟机，在虚拟机终端中使用同一组输入直接执行并比较输出。
+
+```bash
+# 执行位置：WSL / Ubuntu 开发主机终端 B（编译器项目根目录）
+# 等待虚拟机启动且 SSH 服务可用；账号与密码以镜像配置为准
+scp -P 2222 loop loop.opt ubuntu@localhost:~/
+# 此命令在开发主机输入；登录成功后，当前终端进入 QEMU 虚拟机
+ssh -p 2222 ubuntu@localhost
+```
+
+```bash
+# 执行位置：QEMU 虚拟机内的 RISC-V Ubuntu 终端（SSH 登录后）
+cd ~
+# 在虚拟机内直接执行 RISC-V 产物，并比较相同输入的输出
+echo 10000 | ./loop > loop_result.out
+echo 10000 | ./loop.opt > loop_result_opt.out
+diff loop_result.out loop_result_opt.out
+# 结束 SSH 会话，返回开发主机终端 B
+exit
 ```
 
 :::tip[每条规则都要有正例和反例]

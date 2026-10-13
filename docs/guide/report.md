@@ -46,6 +46,7 @@ description: 实验报告的评分标准与提交方式
 提交代码时可参考以下步骤操作：
 
 ```bash
+# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
 # 1. 切到本次实验的分支
 git checkout -b part1-lexer
 

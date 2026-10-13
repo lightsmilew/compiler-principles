@@ -44,7 +44,7 @@ CompilerSystemPractice/
 ├── static/                    # 静态资源（logo、favicon、参考 PDF）
 ├── .github/workflows/         # 部署与 CI 工作流（deploy.yml）
 ├── docusaurus.config.ts       # 站点配置（标题、baseUrl、Mermaid 主题、页脚）
-└── sidebars.ts                # 侧边栏（按 docs/ 目录与 sidebar_position 自动生成）
+└── sidebars.ts                # 侧边栏（显式配置文档顺序与分类）
 ```
 
 ## 🚀 5 分钟本地跑起来
@@ -56,7 +56,7 @@ CompilerSystemPractice/
 
 | 工具 | 推荐版本 | 检查命令 |
 | --- | --- | --- |
-| Node.js | ≥ 18.0（推荐 20 LTS） | `node -v` |
+| Node.js | ≥ 22.0，与 package.json 和 CI 保持一致 | `node -v` |
 | npm | ≥ 9（Node 自带） | `npm -v` |
 | Git | 任意近期版本 | `git --version` |
 
@@ -65,6 +65,7 @@ CompilerSystemPractice/
 ### 步骤 1 — 克隆仓库
 
 ```bash
+# 执行位置：开发主机终端（Windows PowerShell、WSL 或 Ubuntu）
 git clone https://github.com/lightsmilew/compiler-principles.git
 cd compiler-principles
 ```
@@ -74,6 +75,7 @@ cd compiler-principles
 ### 步骤 2 — 安装依赖
 
 ```bash
+# 执行位置：开发主机终端（Windows PowerShell、WSL 或 Ubuntu）
 npm install
 ```
 
@@ -84,6 +86,7 @@ npm install
 ### 步骤 3 — 启动开发服务器
 
 ```bash
+# 执行位置：开发主机终端（Windows PowerShell、WSL 或 Ubuntu）
 npm start
 ```
 
@@ -94,6 +97,7 @@ npm start
 ### 步骤 4 — 常用命令速查
 
 ```bash
+# 执行位置：开发主机终端（Windows PowerShell、WSL 或 Ubuntu）
 npm start              # 本地开发（热更新，http://localhost:3000）
 npm run build          # 构建静态站点到 build/
 npm run serve          # 本地预览构建结果（默认 http://localhost:3000）
@@ -107,8 +111,7 @@ npm run clear          # 清缓存（遇到奇怪问题时再跑）
 
 ## ✍️ 新增一篇实验文档
 
-侧边栏和导航**完全由 `docs/` 目录 + Markdown 文件头自动生成**，
-新增文档不需要改任何配置文件：
+本项目的侧边栏顺序由 `sidebars.ts` 显式配置。新增文档时，创建 Markdown 文件并将其文档 ID 加入对应分类：
 
 1. **放进对应子目录**：
    - 实验 → `docs/labs/`
@@ -127,27 +130,26 @@ npm run clear          # 清缓存（遇到奇怪问题时再跑）
    ---
    ```
 
-3. **保存即可**。侧边栏会自动出现该条目，并按 `sidebar_position` 排序。
+3. 在 `sidebars.ts` 的对应 `items` 列表加入文档 ID，例如 `labs/part8-example`。显式列表中的顺序决定导航顺序，`sidebar_position` 不会覆盖它。
 
 支持的增强语法：
 
 - **Mermaid 图表**（语法树、DFA、流程图）：` ```mermaid `
 - **Docusaurus 提示框**：`:::tip` / `:::info` / `:::warning` / `:::danger`
 - **代码高亮 + 行号** + **行内 `code`**（Prism 主题）
-- **数学公式**：`$inline$` 与 `$$block$$`（由默认 remark/math + rehype/katex 提供）
+- **数学公式**：本项目尚未配置 remark-math / rehype-katex；需要公式排版时应先安装并配置插件。
 
 ### 文档内部链接怎么写
 
-站内链接用**相对路径 + 文档 id（不带 `.md` 后缀）**。Docusaurus v3+ 不再解析 `.md` 后缀：
+站内文档链接可使用相对文件路径（含 `.md` 后缀，由 Docusaurus 解析），也可使用当前项目的相对路由路径。链接与锚点必须以实际文件和生成页面为准：
 
 ```markdown
-同目录：[下一节](./next-section)
-跨目录：[综合课程设计](../labs/capstone)
-带锚点：[环境配置](../guide/environment#附参考文档下载)
+同目录：[词法规则](./grammar.md)
+跨目录：[课程总览](../labs/capstone.md)
+带锚点：[环境配置](../guide/environment.md#四安装-risc-v-交叉工具链与-qemu)
 ```
 
-> ⚠️ 写了 `.md` 后缀（比如 `xxx.md`）Docusaurus 会把它当外部链接，
-> 构建时输出 `Markdown link ... couldn't be resolved` 警告并计入 broken links。
+链接规则参见 [Docusaurus 文档链接说明](https://docusaurus.io/docs/markdown-features/links)。
 
 ## 🚢 部署到 GitHub Pages
 
@@ -169,15 +171,14 @@ npm run clear          # 清缓存（遇到奇怪问题时再跑）
 const organizationName = '你的GitHub用户名';
 const projectName       = '你的仓库名';
 
-const url      = `https://${organizationName}.github.io`;
-const baseUrl  = `/${projectName}/`;
+// 在 config 对象中同步修改当前硬编码的值：
+url: `https://${organizationName}.github.io`,
+baseUrl: `/${projectName}/`,
 ```
 
 ### CI 安全网
 
-CI 会跑 `npm run build`，并启用 `onBrokenLinks: 'throw'`——**任何失效链接都会让构建失败**，
-这样能在合并 PR 之前就把坏链接拦住。如果想让警告不阻塞构建，
-可以在 `docusaurus.config.ts` 里把这一行改成 `onBrokenLinks: 'warn'`。
+CI 运行类型检查和生产构建，配置会把未解析的文档链接、失效站内路由和锚点作为错误。外部网站是否可访问不由 Docusaurus 构建检查，需另行运行链接验证；网络超时或访问限制不能当作通过。
 
 ## 🎨 视觉风格（Corporate Clean · 珞珈绿）
 
@@ -185,11 +186,11 @@ CI 会跑 `npm run build`，并启用 `onBrokenLinks: 'throw'`——**任何失�
 | --- | --- |
 | 主色 | 珞珈绿（`#0e4834` 武大绿） |
 | 辅色 | 珞樱粉、东湖蓝、秋桂黄、春藤紫、黉瓦绿、霜叶红、晨雾灰（用于 Mermaid 多色场景） |
-| 圆角 | 全局 `rounded-lg` / `rounded-xl` |
-| 阴影 | `shadow-sm` 克制层次，hover 时升到 `shadow-md` |
+| 圆角 | `--cc-radius` / `--cc-radius-xl` |
+| 阴影 | `--cc-shadow-sm` / `--cc-shadow-md` |
 | 交互 | 悬停 `translateY(-2px)`、按下 `scale(0.98)`，过渡 ≤ 200ms |
-| 无障碍 | 满足 WCAG 2.1 AA，`focus-visible` 焦点环带偏移量 |
-| 响应式 | 768 / 1100 / 480 三个断点；窄屏单列、宽屏网格 |
+| 无障碍 | 提供 `focus-visible` 焦点环和减少动效设置；完整 WCAG 合规仍需专项审计 |
+| 响应式 | 各页面和组件按实际布局设置媒体查询与容器查询；窄屏单列、宽屏网格 |
 
 风格 token 集中在 `src/css/custom.css` 顶部（`--cc-*`），
 通过覆盖 Infima 的 `--ifm-*` 变量驱动全站主题。
@@ -204,11 +205,12 @@ CI 会跑 `npm run build`，并启用 `onBrokenLinks: 'throw'`——**任何失�
 A：可以临时切换到国内镜像：
 
 ```bash
+# 执行位置：开发主机终端（Windows PowerShell、WSL 或 Ubuntu）
 npm config set registry https://registry.npmmirror.com
 npm install
 ```
 
-或者直接用 `cnpm` / `pnpm` / `yarn` 任一包管理器都可以。
+本仓库提交了 npm 锁文件，CI 使用 `npm ci`；本地建议使用 npm，以便保持依赖版本一致。
 </details>
 
 <details>
@@ -222,7 +224,7 @@ A：站点 baseUrl 是 `/compiler-principles/`，所以本地访问的是
 <details>
 <summary><strong>Q：构建报 <code>Markdown link ... couldn't be resolved</code>？</strong></summary>
 
-A：站内链接不要带 `.md` 后缀。把 `[X](../foo/bar.md)` 改成 `[X](../foo/bar)` 即可。
+A：检查相对路径所指向的文件是否存在，以及文档 ID、路由和锚点是否与生成页面一致。`.md` 后缀本身不会造成链接失效。
 </details>
 
 <details>
@@ -235,7 +237,7 @@ A：先确认 dev server 还在跑（终端里没退出）。如果还不行，
 <details>
 <summary><strong>Q：怎么关闭某个页面的"编辑此页"链接？</strong></summary>
 
-A：移除 Markdown 文件头里的 `slug` / 或者在 `docusaurus.config.ts` 中删掉 `editUrl`。
+A：单页可在 front matter 中设置 `custom_edit_url: null`；全站可在 `docusaurus.config.ts` 中移除 `editUrl`。`slug` 只影响页面路由。
 </details>
 
 ## 🤝 参与贡献
@@ -246,7 +248,7 @@ A：移除 Markdown 文件头里的 `slug` / 或者在 `docusaurus.config.ts` �
 1. Fork 本仓库，从 `main` 切新分支。
 2. 在 `docs/` 对应目录下新增或修改 Markdown。
 3. 本地跑 `npm run build` 确认构建通过、无 broken link 警告。
-4. Push 分支并开 PR，CI 会自动构建预览。
+4. Push 分支并开 PR，CI 会检查类型并构建；当前工作流没有独立的 PR 预览部署。
 
 ## 📜 许可
 
@@ -258,3 +260,7 @@ A：移除 Markdown 文件头里的 `slug` / 或者在 `docusaurus.config.ts` �
 <p align="center">
   Built with ❤️ using <a href="https://docusaurus.io/">Docusaurus</a> · 珞珈绿主题 · 王仕杰、吴润康
 </p>
+
+## 教程核验
+
+核查范围、实际执行结果与验证限制见 [教程核查与实测记录](TUTORIAL_VALIDATION.md)。`scripts/` 提供可重复的代码块、链接、ToyC 样例、LLVM/MLIR、QEMU 调试与运行时检查；CI 会执行这些检查。

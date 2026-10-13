@@ -71,7 +71,7 @@ flowchart LR
   end
 ```
 
-现在所有进入循环的边都先经过 `preheader`，它是循环外唯一的入口。
+现在所有从循环外进入的边都经过 `preheader`。若 header 的 phi 原来有 `(v1, pre1)` 与 `(v2, pre2)`，必须先在 preheader 合并这两个值，再把 header 的这些入边换成 `(merged, preheader)`；不能直接保留旧前驱名或任意选一个值。
 
 ## 三、不变指令的判定
 
@@ -87,7 +87,7 @@ flowchart LR
 **算法 · 循环不变指令判定（Detect Loop-Invariant Instructions）**
 
 **输入（Input）：** 自然循环 `L`（含循环体块集合）。
-**输出（Output）：** 被标记为 `is_invariant` 的指令集合。
+**输出（Output）：** 被标记为 `is_invariant` 的指令集合（load 另需内存不变性分析）。
 
 ```
  1: markInvariants(L):
@@ -95,7 +95,7 @@ flowchart LR
  3:         changed = false;
  4:         for each inst I in postorder(L.body) do
  5:             if I.is_invariant then continue; end if
- 6:             if not I.is_pure() then continue; end if        // 有副作用 -> 不外提
+ 6:             if I is phi/br/ret or not I.is_pure() then continue; end if        // 有副作用 -> 不外提
  7:             if allOperandsOutsideOrInvariant(I, L) then     // 允许依赖已标记的不变量
  8:                 I.is_invariant = true;  changed = true;
  9:             end if

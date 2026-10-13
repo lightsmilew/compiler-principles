@@ -7,7 +7,7 @@ description: 将栈上的局部变量提升为 SSA 值，建立 Use-Def 链，�
 
 # mem2reg：把内存访问提升为 SSA
 
-mem2reg 是 memory-to-register 的缩写。它是机器无关优化的第一步：第三部分生成的 IR 是内存访问型的，变量保存在栈上；mem2reg 把符合条件的局部变量替换为 SSA 值，后面的常量传播、公共子表达式消除和死代码消除才有可用的 Use-Def 链。
+mem2reg 是 memory-to-register 的缩写。它是机器无关优化的第一步：第三部分生成的 IR 是内存访问型的，变量保存在栈上；mem2reg 把符合条件的局部变量替换为 SSA 值，后续优化可沿数值的 Use-Def 链工作。原始 alloca/load/store 本身也是合法 SSA 指令，内存读写间的依赖不能仅由普通 Use-Def 链推导。
 
 ```mermaid
 flowchart TB
@@ -23,7 +23,7 @@ flowchart TB
 
 ## 一、为什么需要 mem2reg
 
-第三部分把 ToyC 的局部变量统一放在栈上：声明处发 `alloca`，赋值处发 `store`，读值处发 `load`。下面这个只有两行语句的函数：
+第三部分把 ToyC 的局部变量统一放在栈上：在函数入口为声明预留 `alloca`，初始化或赋值处发 `store`，读值处发 `load`。下面这个只有两行语句的函数：
 
 ```c
 int f(int a) {
@@ -55,9 +55,9 @@ entry:
 
 这段 IR 在语法和语义上都没有问题，但存在三个缺陷：
 
-1. 计算与数据搬运的比例失衡。`add` 和 `mul` 只有两条，其余指令都在访存：`alloca` 只负责分配栈槽，`load` / `store` 只负责在寄存器与栈之间传递数据。
+1. 计算与数据搬运的比例失衡。`add` 和 `mul` 只有两条，其余还包含槽位分配、访存和返回：`alloca` 只负责分配栈槽，`load` / `store` 只负责在寄存器与栈之间传递数据。
 2. 访存次数本可以更少。`x` 只被写过一次、读过一次，却完整地经历了一次栈往返；这类模式出现在被反复调用的函数里时开销会明显放大。
-3. SSA 的 Use-Def 链被切断。`%t1 = add ...` 的结果立即被 `store` 消费，`load` 得到的 `%x0` 在文本上与 `%t1` 没有可见的对应关系，因此常量传播、CSE、DCE 无法沿着 Use-Def 链工作。
+3. 内存写入与读取的对应关系不直接体现在数值 Use-Def 链中。`%t1 = add ...` 的结果立即被 `store` 消费，`load` 得到的 `%x0` 在文本上与 `%t1` 没有可见的对应关系，这些关系需要内存分析或先做 mem2reg；普通算术值的 Use-Def 链仍然有效。
 
 mem2reg 之后的 IR：
 
@@ -70,7 +70,7 @@ entry:
 }
 ```
 
-9 条指令被消除，函数变成 SSA 形式；变量值由 SSA 名称表示，最终是否放入物理寄存器由后端寄存器分配决定。
+9 条指令被消除，内存变量变成直接传递的 SSA 值；变量值由 SSA 名称表示，最终是否放入物理寄存器由后端寄存器分配决定。
 
 ## 二、哪些 alloca 可以被提升
 
@@ -83,7 +83,7 @@ mem2reg 只提升同时满足下列条件的局部变量：
 | 是标量 | 提升后正好对应一条 SSA 值 | 数组、结构体需要拆成多份或保留在内存中 |
 | 无别名 | 没有其它指针可能指向同一块栈空间 | 指针形参可能正好指向它 |
 
-ToyC 满足这些条件：语言没有取地址运算，因此没有指针形参、数组和别名，函数内每个局部变量都可以提升。需要注意的情形出现在后续的 SysY 扩展（数组、指针）中。
+ToyC 没有取地址、指针和数组；使用入口块 alloca 且仅由普通 load/store 访问时，局部标量可提升。循环体内动态执行的 alloca、volatile 访问和逃逸地址不能直接套用本算法。需要注意的情形出现在后续的 SysY 扩展（数组、指针）中。
 
 ## 三、控制流汇合与 phi
 
@@ -103,7 +103,7 @@ ret i32 1
 分支汇合处需要额外处理。下面这段 `if / else` 中，`x` 有两个可能的来源：
 
 ```c
-int x;
+int x = 0;
 if (cond) x = 1;
 else      x = 2;
 return x;
@@ -170,9 +170,10 @@ DF(entry) = ∅        // entry 支配所有块，没有边界
 
 ```
  1: mem2reg(func):
- 2:     DT = computeDominanceTree(func);                 // 1. 计算支配树
+ 2:     removeUnreachableBlocksAndUpdatePhi(func);
+ 3:     DT = computeDominanceTree(func);                 // 1. 计算支配树
  3:     promoted = [];
- 4:     for each alloca a in func do
+ 4:     for each alloca a in func.entry do
  5:         if not promotable(a) then continue; end if     // 只处理不逃逸的标量局部变量
  6:         promoted.push(a);
  7:     end for
@@ -182,9 +183,10 @@ DF(entry) = ∅        // entry 支配所有块，没有边界
 11:             insertPhi(B, a);                           // 插入空 phi，入边待填
 12:         end for
 13:     end for
-14:     rename(func.entry, DT, promoted);                  // 3. 栈式重命名，填满 phi 入边
-15:     removeDeadAllocas(func);                           // 4. 删除已提升的 alloca / load / store
-16:     return func;
+14:     for each a in promoted do valueStack[a] = [undef(a.type)]; end for
+15:     rename(func.entry, DT, promoted);                  // 3. 栈式重命名，填满 phi 入边
+16:     removeDeadAllocas(func);                           // 4. 删除已提升的 alloca / load / store
+17:     return func;
 ```
 
 **算法 2 · 定位 phi 插入点（iterated dominance frontier）**
@@ -242,7 +244,7 @@ DF(entry) = ∅        // entry 支配所有块，没有边界
 21:     restoreDepths(valueStack, savedDepth);              // 弹出本块所有新增定义
 ```
 
-用栈记录当前值是这一步的核心：沿支配树深度优先递归，入口 `phi` 和每条 `store` 都压入新定义，离开块时恢复到进入前的栈深度。开始重命名前，应按语言约定为每个变量提供初始值，或在语义阶段拒绝未初始化读取。后继 `phi` 的 incoming 值按前驱边填写。
+用栈记录当前值是这一步的核心：沿支配树深度优先递归，入口 `phi` 和每条 `store` 都压入新定义，离开块时恢复到进入前的栈深度。未初始化声明不产生默认的零；提升时以相应类型的 `undef` 开始。功能测试应先赋值再读取；语义检查可以诊断未初始化路径，但不能静默改成零。后继 `phi` 的 incoming 值按前驱边填写。
 
 **算法 4 · 清理（removeDeadAllocas）**
 
@@ -253,7 +255,7 @@ DF(entry) = ∅        // entry 支配所有块，没有边界
  1: removeDeadAllocas(func):
  2:     for each alloca a in func do
  3:         if a is promoted then
- 4:             for each remaining use U of a do remove(U); end for   // 此时只可能剩 load/store
+ 4:             assert a has no remaining uses;                  // 不删除尚有使用的残留指令
  5:             remove(a);                                         // 删除这个栈槽
  6:         end if
  7:     end for
@@ -363,6 +365,7 @@ flowchart TB
 `-ir` 不是必要接口，评测脚本不会调用；若实现了该本地调试接口，可打印 mem2reg 前后的 IR，再检查：
 
 ```bash
+# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
 # 可选：分别打印优化前后的 IR
 ./compiler -ir < test.c > before.ll
 ./compiler -ir -opt < test.c > after.ll

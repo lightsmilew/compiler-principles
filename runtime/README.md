@@ -9,14 +9,18 @@
 在 Linux 或 WSL 中，从仓库根目录执行：
 
 ```bash
+# 执行位置：WSL / Ubuntu 开发主机终端（课程文档站仓库根目录）
 make -B -C runtime
+# 测试脚本在开发主机中调用 qemu-riscv64，执行 RISC-V 测试程序
 make -C runtime test
 ```
 
 需要 `riscv64-unknown-elf-gcc`、配套 binutils、`qemu-riscv64` 和 Python 3。也可使用 Linux 交叉工具链：
 
 ```bash
+# 执行位置：WSL / Ubuntu 开发主机终端（课程文档站仓库根目录）
 make -B -C runtime CROSS_COMPILE=riscv64-linux-gnu-
+# 测试脚本在开发主机中调用 qemu-riscv64，执行 RISC-V 测试程序
 make -C runtime test CROSS_COMPILE=riscv64-linux-gnu-
 ```
 

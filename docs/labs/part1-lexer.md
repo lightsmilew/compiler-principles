@@ -87,19 +87,20 @@ ToyC 有几十条词法规则。如果每条规则各跑一个自动机，就要
 **输出（Output）：** 合并后的 DFA `D`，以及接受状态到 Token 类型的映射。
 
 ```
- 1: N = ∅;                                          // 合并后的 NFA / combined NFA
+ 1: fragments = [];                                 // 保留各条规则的 NFA
  2: for each rule (rᵢ, kindᵢ, prioᵢ) in R do
  3:     Nᵢ = thompson(rᵢ);                          // 正则 -> NFA，Thompson 构造
  4:     mark_accept(Nᵢ, kindᵢ, prioᵢ);              // 标记接受状态及其优先级
- 5:     N = N ∪ Nᵢ;
+ 5:     fragments.append(Nᵢ);
  6: end for
  7: s0 = new_start_state();                         // 新建总起点
- 8: for each Nᵢ in N do
+ 8: for each Nᵢ in fragments do
  9:     add_epsilon_edge(s0, start_of(Nᵢ));         // ε 边连接所有规则起点
 10: end for
-11: D = subset_construction(N);                     // ε-closure + move，直到不再产生新状态
-12: D = hopcroft_minimize(D);                       // 可选：Hopcroft 合并等价状态
-13: return D;
+11: N = combine(fragments, start = s0);              // 包含新起点和所有 ε 边
+12: D = subset_construction(N);                     // ε-closure + move，直到不再产生新状态
+13: D = hopcroft_minimize_preserving_token_labels(D); // 接受类别与优先级不同的状态不能合并
+14: return D;
 ```
 
 ### 4.2 扫描主循环
@@ -110,12 +111,12 @@ ToyC 有几十条词法规则。如果每条规则各跑一个自动机，就要
 **输出（Output）：** Token 序列 `T`。
 
 ```
- 1: pos = 0;                                        // 当前扫描下标 / cursor
- 2: T = ∅;                                          // 结果 Token 序列
+ 1: pos = 0; line = 1; col = 1;                     // cursor 与位置状态
+ 2: T = [];                                         // 有序序列，保留重复 Token
  3: while pos < |S| do
- 4:     (tok, pos) = scanToken(S, pos);             // 扫描一个 Token，见算法 3
+ 4:     (tok, pos, line, col) = scanToken(S, pos, line, col);             // 扫描一个 Token，见算法 3
  5:     if tok.kind == EOF then break; end if       // 文件结束 / end of file
- 6:     if tok.kind != ERROR then T = T ∪ {tok}; end if
+ 6:     if tok.kind != ERROR then T.append(tok); end if
  7: end while
  8: return T;
 ```
@@ -125,33 +126,37 @@ ToyC 有几十条词法规则。如果每条规则各跑一个自动机，就要
 **算法 3 · 扫描单个 Token（Longest-Match scanToken）**
 
 **输入（Input）：** 字符流 `S`、当前下标 `pos`。
-**输出（Output）：** 下一个 Token 及更新后的 `pos`。
+**输出（Output）：** 下一个 Token 及更新后的 `pos / line / col`。
 
 ```
  1: (pos, line, col) = skipWhitespaceAndComment(S, pos, line, col);   // 见算法 4
- 2: start = pos;
- 3: if pos >= |S| then return (EOF, pos); end if      // 输入结束
+ 2: start = pos; start_location = (line, col);
+ 3: if pos >= |S| then return (Token(EOF), pos, line, col); end if      // 输入结束
  4: if isLetter(peek(S, pos)) or peek(S, pos) == '_' then             // 标识符或关键字
- 5:     lexeme = scanWhile(S, pos, isIdentifierChar);
- 6:     return (keywordTable.lookupOr(lexeme, ID), pos);              // 先扫成 ID，再查关键字表
+ 5:     (lexeme, pos) = scanIdentifier(S, pos);         // 返回推进后的下标，同时更新行列
+ 6:     return (Token(keywordTable.lookupOr(lexeme, ID), lexeme, start_location), pos, line, col);
  7: end if
  8: if isDigit(peek(S, pos)) then                                    // 无符号整数
- 9:     lexeme = scanWhile(S, pos, isDigit);
-10:     return (Token(NUMBER, value(lexeme)), pos);
+ 9:     (lexeme, pos) = matchNumberRegex(S, pos);        // 严格匹配 0|[1-9][0-9]*，不把 012 当一个 NUMBER
+10:     return (Token(NUMBER, lexeme, start_location, value(lexeme)), pos, line, col);
 11: end if
 12: state = dfa_start;  last_accept = none;           // 最后一次接受的位置 / last accepting position
 13: while pos < |S| and dfa_step(state, S[pos]) != dead do
-14:     state = dfa_step(state, S[pos]);  pos++;
-15:     if is_accepting(state) then last_accept = (state, pos); end if   // 记录接受点
-16: end while
-17: if last_accept != none then                        // 最长匹配：回退到最后接受点
-18:     (state, pos) = last_accept;
-19:     return (Token(kind_of(state), S[start:pos]), pos);
-20: end if
-21: report_error(start, "unexpected character " + S[start]);
-22: pos++;                                            // 跳过一个非法字符后继续扫描
-23: return (ERROR, pos);
+14:     state = dfa_step(state, S[pos]);
+15:     advanceWithLocation(S, pos, line, col);
+16:     if is_accepting(state) then last_accept = (state, pos, line, col); end if   // 记录接受点
+17: end while
+18: if last_accept != none then                        // 最长匹配：回退到最后接受点
+19:     (state, pos, line, col) = last_accept;
+20:     return (Token(kind_of(state), S[start:pos], start_location), pos, line, col);
+21: end if
+22: report_error(start, "unexpected character " + S[start]);
+23: pos = start; (line, col) = start_location;
+24: advanceWithLocation(S, pos, line, col);             // 跳过一字符，保证推进
+25: return (Token(ERROR), pos, line, col);
 ```
+
+`scanIdentifier`、`matchNumberRegex` 与 `advanceWithLocation` 都更新同一位置状态。回退接受点时必须同时恢复下标和行列；数值转换使用足够宽的整数并单独检查范围，不能让宿主机的解析溢出。Windows 源文件可先将 CRLF/CR 规范化为 LF，再计算这里的行列。
 
 ### 4.4 跳过空白与注释
 
@@ -169,21 +174,22 @@ ToyC 有几十条词法规则。如果每条规则各跑一个自动机，就要
  4:         pos++;  col++;
  5:     else if c == '\n' then                        // 换行：行号 +1，列号复位
  6:         pos++;  line++;  col = 1;
- 7:     else if c == '/' and S[pos+1] == '/' then     // 单行注释 / line comment
- 8:         while pos < |S| and S[pos] != '\n' do pos++; end while
- 9:     else if c == '/' and S[pos+1] == '*' then     // 块注释 / block comment
+ 7:     else if c == '/' and pos+1 < |S| and S[pos+1] == '/' then
+ 8:         while pos < |S| and S[pos] != '\n' do pos++; col++; end while
+ 9:     else if c == '/' and pos+1 < |S| and S[pos+1] == '*' then
 10:         comment_start = (line, col);
-11:         while pos < |S| and not (S[pos] == '*' and S[pos+1] == '/') do
-12:             if S[pos] == '\n' then line++; col = 1; else col++; end if
-13:             pos++;
-14:         end while
-15:         if pos >= |S| then report_error(comment_start, "unterminated comment"); end if
-16:         pos += 2;  col += 2;                        // 跳过 */
-17:     else
-18:         return (pos, line, col);                    // 遇到非空白字符 -> 结束
-19:     end if
-20: end while
-21: return (pos, line, col);
+11:         pos += 2; col += 2;                          // 先消耗 /*，避免将 /*/ 误判为闭合
+12:         while pos < |S| and not (pos+1 < |S| and S[pos] == '*' and S[pos+1] == '/') do
+13:             if S[pos] == '\n' then line++; col = 1; else col++; end if
+14:             pos++;
+15:         end while
+16:         if pos >= |S| then report_error(comment_start, "unterminated comment"); return (|S|, line, col); end if
+17:         pos += 2;  col += 2;                        // 跳过 */
+18:     else
+19:         return (pos, line, col);                    // 遇到非空白字符 -> 结束
+20:     end if
+21: end while
+22: return (pos, line, col);
 ```
 
 ### 4.5 最长匹配图解
@@ -192,8 +198,7 @@ ToyC 有几十条词法规则。如果每条规则各跑一个自动机，就要
 
 ```mermaid
 flowchart TB
-  A["读到 a：接受 ID"] --> B["记录接受点，继续读"]
-  B --> C["读到 小于号：接受 LessThan"]
+  A["扫描 a，输出 ID<br/>下一个 Token 从小于号开始"] --> C["从 DFA 起点读到小于号<br/>接受 LessThan"]
   C --> D["读到 等号：接受 LessEqual"]
   D --> E["读到 b：转移失败"]
   E --> F["回退到最近接受点，输出 LessEqual"]
@@ -202,7 +207,7 @@ flowchart TB
 | 步骤 | 当前字符 | DFA 动作 | 是否接受 | 记录 |
 | --- | --- | --- | --- | --- |
 | 1 | `a` | 进入 ID 状态 | 是 | 接受点 = ID(`a`) |
-| 2 | `<` | 进入 `<` 状态 | 是 | 接受点 = `<` |
+| 2 | `<` | 输出前一 Token 后，从 DFA 起点开始扫描 `<` | 是 | 接受点 = `<` |
 | 3 | `=` | 进入 `<=` 状态 | 是 | 接受点 = `<=` |
 | 4 | `b` | 无转移，失败 | — | — |
 | 5 | — | 回退到接受点 `<=` | — | 输出 `LessEqual` |
@@ -233,12 +238,14 @@ Token {
 - 输入为 ToyC 源代码，从标准输入流读入：
 
   ```bash
+  # 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
   echo "int a = 1;" | ./compiler -token > test.token
   ```
 
 - 本地调试时用文件重定向：
 
   ```bash
+  # 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
   ./compiler -token < test.c > test.token
   ```
 
@@ -267,7 +274,7 @@ Token {
 
 - **序号**：从 `0` 开始，按 Token 出现的先后顺序递增；
 - **类型**：关键字、运算符、界符写成该符号本身并加单引号（如 `'int'`、`'<='`、`'('`）；标识符统一写作 `Ident`；十进制整数常量统一写作 `IntConst`；
-- **内容**：该 Token 在源程序中的原始文本，用双引号括起来。
+- **内容**：符号与标识符使用原始文本并加双引号；IntConst 直接输出十进制数值，不加引号。
 
 空白与注释不产生 Token，所以下面样例输出里的序号是连续的——不会因为空行或注释而跳号。
 
@@ -299,8 +306,10 @@ void show(int v) {
 }
 
 int main() {
-    const int LIMIT = 3, STEP = 1;
-    int a = 5, b;
+    const int LIMIT = 3;
+    const int STEP = 1;
+    int a = 5;
+    int b;
     b = +a - -1;
     int c = (a + b) * 2 / 3 % 4;
     {
@@ -340,7 +349,7 @@ int main() {
 10:'int':"int"
 11:Ident:"s"
 12:'=':"="
-13:IntConst:"0"
+13:IntConst:0
 14:';':";"
 15:'while':"while"
 16:'(':"("
@@ -353,14 +362,14 @@ int main() {
 23:'(':"("
 24:Ident:"from"
 25:'==':"=="
-26:IntConst:"2"
+26:IntConst:2
 27:')':")"
 28:'{':"{"
 29:Ident:"from"
 30:'=':"="
 31:Ident:"from"
 32:'+':"+"
-33:IntConst:"1"
+33:IntConst:1
 34:';':";"
 35:'continue':"continue"
 36:';':";"
@@ -375,7 +384,7 @@ int main() {
 45:'=':"="
 46:Ident:"from"
 47:'+':"+"
-48:IntConst:"1"
+48:IntConst:1
 49:';':";"
 50:'}':"}"
 51:'return':"return"
@@ -405,133 +414,136 @@ int main() {
 75:'int':"int"
 76:Ident:"LIMIT"
 77:'=':"="
-78:IntConst:"3"
-79:',':","
-80:Ident:"STEP"
-81:'=':"="
-82:IntConst:"1"
-83:';':";"
-84:'int':"int"
-85:Ident:"a"
-86:'=':"="
-87:IntConst:"5"
-88:',':","
-89:Ident:"b"
+78:IntConst:3
+79:';':";"
+80:'const':"const"
+81:'int':"int"
+82:Ident:"STEP"
+83:'=':"="
+84:IntConst:1
+85:';':";"
+86:'int':"int"
+87:Ident:"a"
+88:'=':"="
+89:IntConst:5
 90:';':";"
-91:Ident:"b"
-92:'=':"="
-93:'+':"+"
-94:Ident:"a"
-95:'-':"-"
-96:'-':"-"
-97:IntConst:"1"
-98:';':";"
-99:'int':"int"
-100:Ident:"c"
-101:'=':"="
-102:'(':"("
-103:Ident:"a"
-104:'+':"+"
-105:Ident:"b"
-106:')':")"
-107:'*':"*"
-108:IntConst:"2"
-109:'/':"/"
-110:IntConst:"3"
-111:'%':"%"
-112:IntConst:"4"
-113:';':";"
-114:'{':"{"
-115:'int':"int"
-116:Ident:"a"
-117:'=':"="
-118:IntConst:"1"
-119:';':";"
-120:Ident:"c"
-121:'=':"="
-122:Ident:"c"
-123:'+':"+"
-124:Ident:"a"
-125:';':";"
-126:'}':"}"
-127:'if':"if"
-128:'(':"("
-129:Ident:"a"
-130:'>=':">="
-131:Ident:"b"
-132:'&&':"&&"
-133:Ident:"b"
-134:'!=':"!="
-135:IntConst:"0"
-136:'||':"||"
-137:'!':"!"
-138:'(':"("
-139:Ident:"a"
-140:'==':"=="
-141:Ident:"LIMIT"
-142:')':")"
-143:')':")"
-144:'{':"{"
-145:Ident:"c"
-146:'=':"="
-147:Ident:"c"
-148:'+':"+"
-149:Ident:"sum"
-150:'(':"("
-151:Ident:"a"
-152:',':","
-153:Ident:"STEP"
-154:')':")"
-155:';':";"
-156:'}':"}"
-157:'else':"else"
-158:'{':"{"
-159:Ident:"c"
-160:'=':"="
-161:Ident:"c"
-162:'-':"-"
-163:IntConst:"1"
-164:';':";"
-165:'}':"}"
-166:'while':"while"
-167:'(':"("
-168:Ident:"c"
-169:'>':">"
-170:IntConst:"0"
-171:')':")"
-172:'{':"{"
-173:Ident:"c"
-174:'=':"="
-175:Ident:"c"
-176:'-':"-"
-177:IntConst:"1"
-178:';':";"
-179:'if':"if"
-180:'(':"("
-181:Ident:"c"
-182:'==':"=="
-183:IntConst:"5"
-184:')':")"
-185:'continue':"continue"
-186:';':";"
-187:'if':"if"
-188:'(':"("
-189:Ident:"c"
-190:'<':"<"
-191:IntConst:"2"
-192:')':")"
-193:'break':"break"
-194:';':";"
-195:Ident:"show"
-196:'(':"("
-197:Ident:"c"
-198:')':")"
-199:';':";"
-200:'}':"}"
-201:'return':"return"
-202:Ident:"c"
-203:';':";"
-204:'}':"}"
+91:'int':"int"
+92:Ident:"b"
+93:';':";"
+94:Ident:"b"
+95:'=':"="
+96:'+':"+"
+97:Ident:"a"
+98:'-':"-"
+99:'-':"-"
+100:IntConst:1
+101:';':";"
+102:'int':"int"
+103:Ident:"c"
+104:'=':"="
+105:'(':"("
+106:Ident:"a"
+107:'+':"+"
+108:Ident:"b"
+109:')':")"
+110:'*':"*"
+111:IntConst:2
+112:'/':"/"
+113:IntConst:3
+114:'%':"%"
+115:IntConst:4
+116:';':";"
+117:'{':"{"
+118:'int':"int"
+119:Ident:"a"
+120:'=':"="
+121:IntConst:1
+122:';':";"
+123:Ident:"c"
+124:'=':"="
+125:Ident:"c"
+126:'+':"+"
+127:Ident:"a"
+128:';':";"
+129:'}':"}"
+130:'if':"if"
+131:'(':"("
+132:Ident:"a"
+133:'>=':">="
+134:Ident:"b"
+135:'&&':"&&"
+136:Ident:"b"
+137:'!=':"!="
+138:IntConst:0
+139:'||':"||"
+140:'!':"!"
+141:'(':"("
+142:Ident:"a"
+143:'==':"=="
+144:Ident:"LIMIT"
+145:')':")"
+146:')':")"
+147:'{':"{"
+148:Ident:"c"
+149:'=':"="
+150:Ident:"c"
+151:'+':"+"
+152:Ident:"sum"
+153:'(':"("
+154:Ident:"a"
+155:',':","
+156:Ident:"STEP"
+157:')':")"
+158:';':";"
+159:'}':"}"
+160:'else':"else"
+161:'{':"{"
+162:Ident:"c"
+163:'=':"="
+164:Ident:"c"
+165:'-':"-"
+166:IntConst:1
+167:';':";"
+168:'}':"}"
+169:'while':"while"
+170:'(':"("
+171:Ident:"c"
+172:'>':">"
+173:IntConst:0
+174:')':")"
+175:'{':"{"
+176:Ident:"c"
+177:'=':"="
+178:Ident:"c"
+179:'-':"-"
+180:IntConst:1
+181:';':";"
+182:'if':"if"
+183:'(':"("
+184:Ident:"c"
+185:'==':"=="
+186:IntConst:5
+187:')':")"
+188:'continue':"continue"
+189:';':";"
+190:'if':"if"
+191:'(':"("
+192:Ident:"c"
+193:'<':"<"
+194:IntConst:2
+195:')':")"
+196:'break':"break"
+197:';':";"
+198:Ident:"show"
+199:'(':"("
+200:Ident:"c"
+201:')':")"
+202:';':";"
+203:'}':"}"
+204:'return':"return"
+205:Ident:"c"
+206:';':";"
+207:'}':"}"
 ```
 
 ### 自测用例
@@ -554,6 +566,7 @@ int main() {
 第一部分必须提交可以在 Linux 下独立编译运行的完整文件，而不是片段或伪代码。程序应从标准输入读取 ToyC 源程序，并按规定格式输出 Token 流（见第五节的输入输出规范）。
 
 ```bash
+# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
 cmake -S . -B build
 cmake --build build
 ./compiler -token < input.c > input.token

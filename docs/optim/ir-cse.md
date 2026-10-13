@@ -47,7 +47,7 @@ flowchart LR
 CSE 的两个条件：
 
 1. 操作数可用性：沿当前路径从入口到当前点，每个操作数都未在两条求值之间被重定义；
-2. 表达式等价：两条指令的 opcode 和所有操作数都相同（字面相同即可，无需别名分析）。
+2. 表达式等价：两条纯算术指令的 opcode、结果类型、操作数以及影响语义的标志都相同。内存读取还需要别名与内存状态分析，不能仅比较文本。
 
 这等价于"表达式在支配路径上"且"两次求值之间操作数未被 kill"。
 
@@ -62,7 +62,7 @@ available_out[B] = gen[B] ∪ (available_in[B] − kill[B])
 一个前向数据流问题：
 
 ```text
-AE_gen[B]  = { expr(I) : I 是块 B 中纯表达式指令 }
+AE_gen[B]  = { 块 B 内求值且在到达块出口前未被 kill 的表达式 }
 AE_kill[B] = { expr(I') : I' 是块 B 中对操作数有重定义的指令 }
 AE_in[B]   = ∩ AE_out[P]                      for all P in predecessors[B]
 AE_out[B]  = AE_gen[B] ∪ (AE_in[B] − AE_kill[B])
@@ -77,45 +77,32 @@ AE_out[B]  = AE_gen[B] ∪ (AE_in[B] − AE_kill[B])
 
 ```
  1: cse(func):
- 2:     for each block B in func do AE_in[B] = ∅;  AE_out[B] = U; end for   // 初值：入口空、出口全集
- 3:     repeat
- 4:         changed = false;
- 5:         for each block B in reversePostOrder(func) do
- 6:             new_in = U;                                     // 前驱交集初值
- 7:             if B is entry then new_in = ∅; end if
- 8:             for each P in B.predecessors do
- 9:                 new_in = new_in ∩ AE_out[P];                // meet：前驱交集
-10:             end for
-11:             new_out = AE_gen[B] ∪ (new_in − AE_kill[B]);    // transfer 函数
-12:             if new_in != AE_in[B] or new_out != AE_out[B] then
-13:                 AE_in[B] = new_in;  AE_out[B] = new_out;  changed = true;
-14:             end if
-15:         end for
-16:     until not changed
-17:     for each block B in func do                             // 应用：删除冗余表达式
-18:         available = AE_in[B]
-19:         for each pure instruction I in B do
-20:             if expr(I) ∈ available then
-21:                 replaceAllUsesWith(I.result, availableExpr(I));  delete(I);
-22:             else
-23:                 available.add(expr(I));
-24:             end if
-25:         end for
-26:     end for
+ 2:     DT = computeDominatorTree(func);
+ 3:     visit(func.entry, emptyScopedMap(), DT);
+ 4:
+ 5: visit(B, table, DT):
+ 6:     table.pushScope();                               // 每个支配树分支独立
+ 7:     for each instruction I in B in program order do
+ 8:         if not isPureArithmeticOrComparison(I) then continue; end if
+ 9:         key = (I.opcode, I.type, I.flags, I.operands);
+10:         if table contains key then
+11:             V = table[key];                          // 同块前面的定义或支配块中的定义
+12:             replaceAllUsesWith(I.result, V); eraseSafely(I);
+13:         else table[key] = I.result; end if
+14:     end for
+15:     for each child C of B in DT do visit(C, table, DT); end for
+16:     table.popScope();                                // 防止兄弟分支互相复用非支配定义
 ```
 
-对每条表达式指令 `I`，若 `expr(I) ∈ AE_in[块 B]`，则说明 `I` 在支配路径上已经求过值——可以删除 `I`，并把后续 use 替换为之前的 SSA 值。
+可用表达式分析只证明每条到达路径都计算过这个表达式，不保证存在一个支配当前点的 SSA 定义。例如菱形 CFG 的两个分支各自计算 `%x + 1`，汇合块不能任意复用某一分支的值；需要新建 `phi`，或保守保留该计算。上面的支配树算法只复用确定支配使用点的定义，避免这个错误。其设计可对照 [LLVM EarlyCSE 说明](https://llvm.org/docs/Passes.html#early-cse-early-common-subexpression-elimination)。
 
 ```mermaid
 flowchart TD
-  Init[入口 AE_in 为空集，其余 AE_out 置全集] --> Loop{changed?}
-  Loop -- 是 --> Visit[按 RPO 遍历基本块]
-  Visit --> Meet["new_in = 各前驱 AE_out 的交集"]
-  Meet --> Trans["new_out = gen ∪ new_in - kill"]
-  Trans --> Update{集合有变化?}
-  Update -- 是 --> Flag[changed = true] --> Loop
-  Update -- 否 --> Loop
-  Loop -- 否 --> Apply[扫描每条指令:<br/>若 expr ∈ AE_in 则替换并删除]
+  Init[建立支配树] --> Visit[进入块：压入表达式表作用域]
+  Visit --> Scan[按指令顺序匹配纯算术表达式]
+  Scan --> Replace[复用表中支配当前点的值，或登记新定义]
+  Replace --> Child[递归访问支配树子块]
+  Child --> Pop[退出块：弹出作用域]
 ```
 
 ## 四、局部 CSE 与全局 CSE
@@ -125,14 +112,14 @@ flowchart TD
 | 局部 CSE | 单个基本块内 | 在块内维护 `unordered_map<Expr, Value*>` |
 | 全局 CSE | 整个函数 | 依赖可用表达式分析 + 支配树 |
 
-ToyC 实现全局 CSE 就足够。先做可用表达式，再扫描每条指令复用即可。
+第一版可先实现局部 CSE，再按上面的支配树作用域扩展到全局。仅有表达式集合还不足以确定安全的 SSA 替换值。
 
 ## 五、与 GVN 的关系
 
 更激进的版本叫 GVN（Global Value Numbering）：
 
 - CSE 只识别字面相同的表达式；
-- GVN 给每个表达式计算一个 hash 值（VN），等价的表达式即使字面不同也能合并：
+- GVN 为等价值建立值编号（VN）；哈希可用于查表，但发生碰撞时仍须比较结构，等价的表达式即使字面不同也能合并：
 
   ```llvm
   %a = add i32 %x, %y
@@ -147,15 +134,15 @@ ToyC 实现全局 CSE 就足够。先做可用表达式，再扫描每条指令�
 
 - CSE 之前：建议先做常量折叠/传播——把 `%a = add i32 2, 3` 折叠后下游字面相同，便于匹配；
 - CSE 之后：替换 use 后旧定义可能失去 use，交给 DCE 清理；
-- CSE 与循环：循环体内的不变量会被 CSE 自动识别（在支配路径上），无需单独的循环优化。
+- CSE 可消除支配路径上的重复计算；把循环不变指令移到预头仍需要 LICM 的不变性和安全性检查。
 
 ## 七、实现注意事项
 
 | 问题 | 处理 |
 | --- | --- |
-| `load` 指令 | ToyC 暂不实现；如果实现，要做内存别名分析确认两次 `load` 之间没有 `store` |
-| 函数调用 | 调用是表达式边界，调用后的表达式不能与调用前的合并 |
+| `load` 指令 | ToyC 的内存访问型 IR 使用 load；第一版 CSE 保守跳过，进一步优化须证明内存内容未改变 |
+| 函数调用 | 未知调用可能改变内存；不能跨它复用未经分析的 load。纯算术 SSA 表达式不因此自动失效 |
 | `phi` 节点 | phi 是合并点，不参与 CSE 的"等价表达式"集合 |
-| 浮点 | IEEE 754 下 `+` 不严格满足结合律，CSE 可能改变 NaN 行为；整数无此问题 |
+| 浮点 | 不得因浮点结合律重排就宣称等价；严格 CSE 也须匹配类型、全部操作数和语义属性 |
 
 下一步阅读：[控制流简化](ir-cfg-simplify)。

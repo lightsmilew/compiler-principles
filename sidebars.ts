@@ -3,13 +3,8 @@ import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
 /**
- * 侧边栏由 docs/ 目录结构自动生成。
- *
- * 顺序与标题通过两处控制：
- *  1. 目录级：docs/<目录>/_category_.json 中的 label / position
- *  2. 文件级：md 文章头部的 `sidebar_position` 与 `sidebar_label`
- *
- * 新增一篇实验文档时无需改动本文件，放进 docs/ 即可。
+ * 侧边栏分类和顺序由下面的显式 items 列表决定。
+ * 新增文档时须将文档 ID 加入对应列表；标题可由 front matter 设置。
  */
 const sidebars: SidebarsConfig = {
   docsSidebar: [
@@ -18,7 +13,8 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: '实验指南',
       collapsible: false,
-      items: ['guide/environment', 'guide/workflow', 'guide/report', 'guide/grading', 'guide/submission'],
+      items: ['guide/environment',
+        'guide/qemu-debugging', 'guide/workflow', 'guide/report', 'guide/grading', 'guide/submission'],
     },
     {
       type: 'category',

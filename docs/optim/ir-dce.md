@@ -34,7 +34,7 @@ call void @foo(i32 %x)    ; 未知是否纯函数，不能删除
 store i32 %y, i32* %p     ; 即使写入位置未再读取，也不能删除
 ```
 
-函数调用可能影响 I/O 或全局状态，删除会改变程序行为。若能证明被调用函数是纯函数，且返回值没有 use，则调用本身没有可观察结果，可以删除。
+函数调用可能影响 I/O、全局状态或程序是否终止。只有同时证明调用无可观察副作用、正常终止且没有需要保留的异常或陷阱行为，返回值又未使用时，才可删除。无副作用但会无限循环的调用不能直接删掉。
 
 ### 纯函数
 
@@ -50,7 +50,7 @@ void eliminate_dead_in_block(BasicBlock& B) {
     auto terminator_uses = B.terminator.operands();
     alive.insert(terminator_uses.begin(), terminator_uses.end());
     // 倒序扫描块内指令，最后使用的最先生效
-    for (auto it = B.instructions.rbegin(); it != B.instructions.rend(); ++it) {
+    for (auto it = B.instructions.rbegin(); it != B.instructions.rend(); ) {
         auto uses = it->operands();
         auto defs = it->results();
         bool has_side_effect = !it->is_safe_to_remove();
@@ -58,14 +58,17 @@ void eliminate_dead_in_block(BasicBlock& B) {
             return alive.count(v) > 0;
         });
         if (!has_side_effect && !result_used) {
-            B.erase(it);
+            it = B.erase_reverse_and_advance(it);  // 使用容器对应的安全删除接口，不能再 ++ 失效迭代器
         } else {
             for (auto* v : defs) alive.erase(v);
             alive.insert(uses.begin(), uses.end());
+            ++it;
         }
     }
 }
 ```
+
+`is_safe_to_remove` 必须包含副作用、终止和陷阱条件。`erase_reverse_and_advance` 是自定义容器辅助接口，应删除当前项并返回下一个有效的逆向迭代器；它不是标准库成员函数。
 
 倒序扫描是关键——后面的"使用"先于前面的"定义"被看到。下面这张图展示了在单个基本块内，从 `live_out` 开始逐条反向扫描的传播过程：
 
@@ -100,7 +103,7 @@ flowchart TD
  8: markLive(func):                                 // 从有副作用的"根"出发
  9:     for each block B in func do
 10:         for each inst I in B do
-11:             if I.has_side_effect or I.is_terminator then mark(I); end if
+11:             if not I.is_safe_to_remove() then mark(I); end if
 12:         end for
 13:     end for
 14:
@@ -156,7 +159,7 @@ DCE 不能简单地删除所有"无人使用"的指令，必须同时考虑：
 | --- | :---: | --- |
 | 纯算术（`add/mul/icmp`） | 是 | 结果未用且无副作用 |
 | `store` | 否 | 写内存有副作用 |
-| `call` | 条件可删 | 返回值未使用且已证明被调函数是纯函数时可删；未知纯度时保留 |
+| `call` | 条件可删 | 返回值未使用且已证明无副作用、正常终止并满足陷阱条件时可删；未知调用保留 |
 | `br` / `ret` | 否 | 控制流指令 |
 | 从入口不可达的块 | 是 | 可达性分析证明该块不会执行 |
 

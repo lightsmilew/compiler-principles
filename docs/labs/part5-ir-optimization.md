@@ -48,7 +48,7 @@ flowchart LR
  1: buildCFG(func):
  2:     leaders = { func.first_instruction };              // 1. 找所有"首领"指令
  3:     for each instruction I in func do
- 4:         if I is a jump then leaders.add(I.target); end if     // 跳转目标
+ 4:         for each target T in successorsOf(I) do leaders.add(T); end for     // 跳转目标
  5:         if I is a terminator and I.next exists then
  6:             leaders.add(I.next);                              // 终结指令的后一条
  7:         end if
@@ -176,15 +176,16 @@ ret i32 1
  2:     worklist = allInstructions(func);
  3:     while worklist not empty do
  4:         I = worklist.pop();
- 5:         if allOperandsAreConstant(I) and isPure(I) then
- 6:             value = evaluate(I.opcode, I.operands);    // 编译期求值
- 7:             replaceAllUsesWith(I.result, Constant(value));
- 8:             markDead(I.result);                         // 原指令变为死代码
- 9:         else if I.opcode == 'phi' then
-10:             if allIncomingValuesEqual(I) then replaceAllUsesWith(I.result, I.incoming[0]); end if
-11:         end if
-12:         pushUsersIntoWorklist(I.result);                // 使用者可能因替换而变得可折叠
-13:     end while
+ 5:         if I is removed or has no result then continue; end if
+ 6:         replacement = tryFoldWithTargetSemantics(I);     // 位宽、标志、除零、phi 入边均检查
+ 7:         if replacement == none then continue; end if
+ 8:         users = snapshotUsers(I.result);                 // 替换前记录旧使用者
+ 9:         if hasUses(I.result) then
+10:             replaceAllUsesWith(I.result, replacement);
+11:             worklist.addAll(users);                     // 仅实际改变时加入工作集
+12:         end if
+13:         if isSafeToRemove(I) then eraseSafely(I); end if
+14:     end while
 ```
 
 例如：
@@ -214,15 +215,15 @@ ret i32 20
  1: dce(func):
  2:     worklist = [];
  3:     for each I in func do
- 4:         if hasNoUses(I.result) and isPure(I) then worklist.push(I); end if
+ 4:         if I has a result and hasNoUses(I.result) and isSafeToRemove(I) then worklist.push(I); end if
  5:     end for
  6:     while worklist not empty do
  7:         I = worklist.pop();
- 8:         if I is already removed then continue; end if
+ 8:         if I is removed or not isSafeToRemove(I) or hasUses(I.result) then continue; end if
  9:         for each operand V of I do
 10:             removeUse(V, I);
-11:             if hasNoUses(V) and isPure(definingInstruction(V)) then
-12:                 worklist.push(definingInstruction(V));    // 连锁删除
+11:             if V is defined by D and hasNoUses(V) and isSafeToRemove(D) then
+12:                 worklist.push(D);    // 连锁删除
 13:             end if
 14:         end for
 15:         remove(I);
@@ -245,13 +246,13 @@ ret i32 20
 CSE 依赖可用表达式分析（一个前向数据流问题）：
 
 ```text
-AE_gen[B]  = { expr(I) : I 是块 B 中的纯表达式指令 }
+AE_gen[B]  = { 在 B 中计算，且到 B 出口前操作数未被重定义的表达式 }
 AE_kill[B] = { expr(I') : I' 是块 B 中对某操作数有重定义的指令 }
 AE_in[B]   = ∩ AE_out[P]               for all P in predecessors[B]
 AE_out[B]  = AE_gen[B] ∪ (AE_in[B] − AE_kill[B])
 ```
 
-若 `expr(I) ∈ AE_in[B]`，说明该表达式在到达 `B` 的支配路径上已经求过值，可删除 `I` 并把后续 use 替换为之前的 SSA 值。更激进的版本是 GVN（Global Value Numbering），它能识别"字面不同但等价"的表达式（如 `x+y` 与 `y+x`）。
+可用表达式集合只能说明表达式在所有到达路径上已计算过，不能直接选择任意一个旧 SSA 值。替换值的定义必须支配使用点；菱形 CFG 的两个分支分别计算相同表达式时，需要 `phi` 合并或保留原计算。第一版推荐按支配树遍历并维护作用域表达式表，具体算法见 [CSE](../optim/ir-cse)。GVN 进一步通过值编号识别等价表达式。
 
 ### 2.5 控制流简化
 
@@ -259,7 +260,7 @@ AE_out[B]  = AE_gen[B] ∪ (AE_in[B] − AE_kill[B])
 
 ```llvm
 ; 恒真分支
-br i1 true, label %T, label %F     ; 等价于 br label %T；%F 变为不可达
+br i1 true, label %T, label %F     ; 改为 br label %T；%F 是否不可达还要检查其它入边
 ; 跳转到跳转
 br label %L1
 L1: br label %L2                   ; 等价于把前一条 br 改为 br label %L2
@@ -278,12 +279,12 @@ L1: br label %L2                   ; 等价于把前一条 br 改为 br label %L
 循环中每轮都要执行一次的除法可能成为热点；延迟取决于目标处理器。对无符号数或已证明非负的分子，当除数是编译期常量时，除法可以改写为“乘一个魔数再右移若干位”：
 
 ```text
-s = ceil(log2 d)                        // 移位量
+s = ceil(log2 d)                        // 非 2 的幂的正除数 d；x 是无符号 32 位值
 M = floor(2^(32+s) / d) + 1             // 魔数，恰好落在 (2^32, 2^33] 内
 x / d  =  (x * M) >> (32 + s)
 ```
 
-在 RV64 上，32 位无符号乘积的高半部分要用 64 位 `mul` 后再 `srli 32` 取得；不能把 RV64 的 `mulhu` 直接当作 32×32 高位乘法。以 `x / 10` 为例，低 32 位魔数是 `0x9999999A`、移位量是 4。取余再由商反算：`r = x − q * d`。乘法的强度削减（`x * 2^k` 换成 `slli`）仍需遵守 32 位语义；除法向零截断，不能直接用普通移位替换，只有除数是编译期常量时才按魔数法替换。
+在 RV64 上，32 位无符号乘积的高半部分要用 64 位 `mul` 后再 `srli 32` 取得；不能把 RV64 的 `mulhu` 直接当作 32×32 高位乘法。以 `x / 10` 为例，低 32 位魔数是 `0x9999999A`、移位量是 4。取余再由商反算：`r = x − q * d`。乘法的强度削减（`x * 2^k` 换成 `slliw`）仍需遵守 32 位语义；除法向零截断，不能直接用普通移位替换，只有除数是编译期常量时才按魔数法替换。
 
 原理推导、魔数表、算法与正确性陷阱见 [强度削减：乘法换移位与魔数法除法](../optim/ir-strength-reduction)。
 
@@ -295,7 +296,7 @@ x / d  =  (x * M) >> (32 + s)
 
 ### 2.9 基本块重排
 
-顺序执行的指令通常更利于取指，跳转还会引入分支预测和目标地址开销。基本块重排不改变任何计算，只调整基本块的输出顺序：用静态启发式估计每条边的权重（循环回边权重最高，`then` 比 `else` 更常执行，向前跳的分支多为退出或报错这类冷路径），再把权重大的边固定为相邻关系。后端发射时，热路径上的相邻无条件跳转可以省略；`break` / `continue`、错误处理等冷块集中到函数末尾。
+顺序执行的指令通常更利于取指，跳转还会引入分支预测和目标地址开销。基本块重排不改变任何计算，只调整基本块的输出顺序：依据 profile 或明确的程序信息估计边权重，再把权重大的边固定为相邻关系。没有证据时不认定 then、else、break 或 continue 的冷热。函数入口始终首先发射；后端仅省略通向下一块的无条件跳转，并保持所有控制流边。
 
 它只改变布局、不改变语义，收益取决于权重估计的准确性。细节见 [基本块重排](../optim/ir-block-layout)。
 
@@ -329,7 +330,7 @@ flowchart TB
 
 几个观察：
 
-- mem2reg 排在最前且通常只做一次：它把内存访问改写为 SSA 值，是后续所有基于 Use-Def 的优化的前提；
+- mem2reg 排在最前且通常只做一次：它把内存访问改写为 SSA 值，有助于后续数值优化；原 IR 的算术 SSA 值本来就具有 Use-Def 链；
 - 折叠 → 传播：折叠产生新的常量定义后，传播才能继续替换；
 - 传播 → DCE：传播后旧定义失去 use，由 DCE 删除；
 - 强度削减排在常量传播之后：只有除数与乘数被传播为常量，才能替换；
@@ -341,6 +342,7 @@ flowchart TB
 功能样例评测调用 `-asm`，不带 `-opt`；性能样例评测调用 `-asm -opt`，编译器必须支持该优化开关。`-ir` 不是必要接口，评测脚本不会调用；若实现了本地调试接口，可额外导出优化前后的 IR：
 
 ```bash
+# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
 cmake -S . -B build
 cmake --build build
 ./compiler -ir < input.c > input.ll           # 可选调试接口
@@ -354,6 +356,7 @@ cmake --build build
 如果导出了优化前后的 IR，可单独统计以下指标：
 
 ```bash
+# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
 grep -c 'alloca'          input.ll         input.opt.ll   # mem2reg 是否生效
 grep -cE '\b(load|store)\b' input.ll     input.opt.ll   # 访存指令是否减少
 grep -cE '\b(sdiv|srem|udiv|urem)\b' input.ll input.opt.ll   # 除法是否被魔数法消掉

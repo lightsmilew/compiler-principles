@@ -8,7 +8,7 @@ description: 中间表示的结构、ToyC 编译器中的使用方式以及两�
 # LLVM IR 与 MLIR 参考
 
 :::caution[工程约束]
-ToyC 编译器全程禁止引入任何第三方运行时库，包括 LLVM、MLIR 以及其他编译器基础设施。LLVM IR 与 MLIR 仅作为参考架构，用于理解 SSA 设计、`phi` 语义、多阶段 lowering 等思想。词法与语法分析阶段允许使用工具生成代码骨架（例如基于 Flex/Bison 的实现），但 IR 生成、优化、目标代码生成都必须自行完成。课程项目的 IR 实现推荐自定义三地址码。
+课程编译器不能直接套用 Clang、LLVM、MLIR 的分析、优化或代码生成实现。LLVM IR 与 MLIR 仅作为参考架构，用于理解 SSA 设计、`phi` 语义、多阶段 lowering 等思想。词法与语法分析阶段允许使用工具生成代码骨架（例如基于 Flex/Bison 的实现），但 IR 生成、优化、目标代码生成都必须自行完成。可选择自定义三地址码或自行维护的 LLVM 风格文本 IR；生成器所需的前端运行库与课程提供的目标运行时按相应接口使用。
 :::
 
 第三部分的 IR 设计建议使用自定义三地址码，必要时可参考 LLVM IR 与 MLIR 的设计理念。本页用于在开始第三部分前建立共同概念。
@@ -36,7 +36,7 @@ flowchart TD
 
 - **Module**：一个编译单元，相当于一个 `.c` 文件翻译后的产物；包含目标三元组（`riscv64-unknown-elf`）、数据布局（指针宽度、对齐）、全局变量、外部函数声明、若干 Function。
 - **Function**：包含参数列表、返回类型、若干 BasicBlock；可以带属性（如 `readonly`、`nounwind`）帮助优化器推断副作用。
-- **BasicBlock**：以标签（如 `entry:`、`while.body:`、`while.end:`）开头，单入口、多出口，最后一条指令必须是 terminator（`br` / `cond_br` / `switch` / `ret` / `unreachable`）。
+- **BasicBlock**：以标签（如 `entry:`、`while.body:`、`while.end:`）开头，单入口、末尾一个终结指令（该指令可有多个后继），最后一条指令必须是 terminator（`br` / `switch` / `ret` / `unreachable`）。
 - **Instruction**：基本计算单元，结果用 `%name` 表示。
 - **SSA Value**：每个 SSA 名称在函数内只被定义一次；控制流汇合处用 `phi` 选择来自不同前驱的值。
 
@@ -93,7 +93,7 @@ join:
 | 比较 | `icmp slt / sgt / eq` | 整数比较；`fcmp` 浮点 |
 | 内存 | `alloca / load / store / getelementptr` | `alloca` 在栈上分配；`getelementptr`（GEP）只算地址，不访问内存 |
 | 调用 | `call / invoke` | 调用约定由参数类型与属性决定 |
-| 终止符 | `br / cond_br / switch / ret / unreachable` | 必须放在 BasicBlock 末尾 |
+| 终止符 | `br / switch / ret / unreachable` | 必须放在 BasicBlock 末尾 |
 | SSA 汇合 | `phi` | 选前驱块传入的值 |
 | 类型转换 | `trunc / zext / sext / bitcast / ptrtoint / inttoptr` | 影响后续优化合法性 |
 | 选择 | `select i1 %c, i32 %a, i32 %b` | 等价于无分支的三目运算符 |
@@ -105,11 +105,11 @@ LLVM IR 的类型影响 lowering 和优化合法性：
 | 类型 | 例子 | 含义 |
 |---|---|---|
 | 整数 | `i1 / i32 / i64` | 任意宽度整数，`i1` 是布尔 |
-| 浮点 | `float / double` | 与 C 一致 |
-| 指针 | `ptr`（新版）/ `i8*` / `i32*` | opaque 指针（LLVM 14+）不携带元素类型 |
+| 浮点 | `float / double` | IEEE 754 binary32 / binary64 |
+| 指针 | `ptr`（新版）/ `i8*` / `i32*` | 本页使用 LLVM 18 的 opaque pointer `ptr`；元素类型写在 load/store/GEP 中 |
 | 数组 | `[10 x i32]` | 定长数组，元素布局确定 |
 | 结构 | `{ i32, float }` | 字面顺序的字段集合 |
-| 函数 | `i32 (i32, i32)*` | 函数指针类型 |
+| 函数 | `i32 (i32, i32)` | 函数类型；opaque pointer 模式下函数指针值使用 ptr |
 
 例如，`getelementptr [10 x i32], ptr %arr, i64 0, i64 %i` 计算 `&arr[i]`，不读取内存；后续 `load i32, ptr %p` 才读取该地址的值。IR 将地址计算与内存访问分开表示，便于分别分析指针运算和读写操作。
 
@@ -160,11 +160,11 @@ join:
 
 实现建议：第三部分先输出 `alloca/load/store` 形式以保证正确性即可，不要求在这一步实现 mem2reg；把变量提升到 SSA 的 mem2reg 属于第五部分的机器无关优化，做法见 [mem2reg：把内存访问提升为 SSA](../optim/ir-mem2reg)。如果在第五部分也不实现，后续的常量传播、公共子表达式消除、死代码消除都只能停留在内存模型上，目标程序的访存也会明显偏多。
 
-### 1.7 典型 ToyC 程序完整示例
+### 1.7 数组扩展的 C 程序示例
 
 下面把 `int sum_abs(int *A, int n)`（求数组前 n 个元素的绝对值之和）翻译成 LLVM IR，涵盖循环、归纳变量 `phi`、内存加载、函数调用。
 
-ToyC 源码：
+C 源码（包含基础 ToyC 不支持的数组、指针与条件运算符）：
 
 ```c
 int abs(int x) { return x < 0 ? -x : x; }
@@ -223,41 +223,43 @@ loop.end:
 - 归纳变量用 phi 表达：`%i` 和 `%s` 在 `loop.header` 既是循环入口定义（来自 `entry`）也是循环回边定义（来自 `loop.body`）；这是 LLVM IR 表达 `for`/`while` 循环的标准模式。
 - `getelementptr` 不读内存：`%elem.ptr = getelementptr i32, ptr %A, i64 %idx` 只算地址；`load i32, ptr %elem.ptr` 才真正访问内存；中间可以插入别名分析而不影响正确性。
 - `call` 遵循 calling convention：`@abs(i32 %elem)` 默认按 C 调用约定传参；返回 `i32` 放在 `a0`（RISC-V）或 `eax`（x86）。使用 LLVM 后端时由其处理；课程项目需要自行实现相应的参数传递与返回值处理。
-- `sext i32 %i to i64`：GEP 索引要求 64 位（与目标机器位宽一致），所以把 `i32` 提升为 `i64`。
+- `sext i32 %i to i64`：GEP 允许整数类型索引；此处显式扩展到 `i64` 来匹配示例的 64 位地址运算，并不要求所有索引都必须是 `i64`。
 
 ### 1.8 LLVM IR 到 RISC-V 的端到端 lowering
 
-把上面的 `sum_abs` 在 `opt -O2` 后交给 `llc --target=riscv64-unknown-elf`，得到的 RV64GC 汇编（简化）：
+把上面的 `sum_abs` 在 `opt -O2` 后交给 `llc -mtriple=riscv64-unknown-linux-gnu -mattr=+m,+a,+f,+d,+c`，用 LLVM 18 实际生成的 RV64GC 汇编片段：
 
 ```asm
-sum_abs:
-        blez    a1, .LBB1_4
-        li      a2, 0
-        li      a3, 0
-.LBB1_2:                                # 循环头
-        slli    a4, a2, 2                # i * 4 (GEP 已折叠成偏移)
-        add     a4, a0, a4
-        lw      a5, 0(a4)                # load A[i]
-        sext.w  a0, a5
-        bge     a0, zero, .LBB1_3        # if x >= 0
-        sub     a0, zero, a0
-.LBB1_3:
-        addw    a3, a3, a0
-        addiw   a2, a2, 1
-        blt     a2, a1, .LBB1_2          # if i < n 继续循环
-        mv      a0, a3
-        ret
+sum_abs:                                # @sum_abs
+# %bb.0:                                # %entry
+	sext.w	a2, a1
+	blez	a2, .LBB1_4
+# %bb.1:                                # %loop.body.preheader
+	li	a2, 0
+	addi	a1, a1, -1
+	slli	a1, a1, 32
+	srli	a1, a1, 30
+	add	a1, a1, a0
+	addi	a1, a1, 4
+.LBB1_2:                                # %loop.body
+                                        # =>This Inner Loop Header: Depth=1
+	lw	a3, 0(a0)
+	sraiw	a4, a3, 31
+	xor	a3, a3, a4
+	subw	a4, a4, a2
+	addi	a0, a0, 4
+	subw	a2, a3, a4
+	bne	a0, a1, .LBB1_2
+# %bb.3:                                # %loop.end
+	mv	a0, a2
+	ret
 .LBB1_4:
-        li      a0, 0
-        ret
+	li	a2, 0
+	mv	a0, a2
+	ret
 ```
 
-可以观察到 LLVM 自动完成了：
-- phi 消除：把两个 phi 的初值分别落到 `a2`（i）和 `a3`（s）的寄存器中。
-- 归纳变量强度削减：`%i * 4` 折叠成 `slli a4, a2, 2`，因为数组步长已知。
-- 循环外提：`abs` 调用未外提（因为结果依赖 `A[i]`），但 `n <= 0` 提前退出。
-- 寄存器分配：`%i`、`%s`、参数 `A`、`n` 映射到 `a0~a4`。
-- CFG 简化和汇编化：phi 节点被消除成直接寄存器传递；GEP 变成 `slli + add` 的指针算术。
+实际输出中，`abs` 已内联，循环通过指针每次前进 4 字节来访问数组；基地址寄存器直到读取结束前都保留为地址。32 位绝对值和累加使用 `subw` 等指令保持 `i32` 语义，结束时才把累加结果放到 `a0`。不同 LLVM 版本可能生成不同序列，应以运行结果、ABI 和 IR verifier 为依据。该示例仅用于理解 lowering；课程编译器仍须自行实现后端。
 
 ### 1.9 LLVM IR 的优点与局限
 
@@ -357,270 +359,84 @@ replace_all_uses(old_value, new_value):
 
 ## 三、MLIR 的结构
 
-MLIR 使用通用 IR 基础设施和可组合的 Dialect；它的核心概念是：
+MLIR 用 Operation、Region、Block 和 SSA Value 组织程序，Dialect 则定义某类操作、类型和属性。一个 Region 可以包含多个基本块，块参数表达来自前驱的值；是否必须有 terminator 由所属 operation 的约束决定。
+
+本节用数组求和说明不同层次的表示。数组和指针属于扩展语言示例，不属于基础 ToyC。示例使用 MLIR 18 的语法，可用 `mlir-opt` 进行解析和 verifier 检查；课程编译器的实现仍须自行完成。
+
+### 3.1 Affine 方言
+
+Affine 保留可分析的循环边界与访问关系。下标可包含维度、符号和常数构成的仿射表达式，函数参数 `%n` 可以作为动态符号，因此“运行时才知道循环上界”并不意味着不能使用 Affine。`affine.for` 的步长要求为正整数常量，数据相关的复杂控制流可能需要 SCF 或 CF。
+
+```mlir
+func.func @sum_affine(%A: memref<?xi32>, %n: index) -> i32 {
+  %zero = arith.constant 0 : i32
+  %sum = affine.for %i = 0 to %n iter_args(%acc = %zero) -> (i32) {
+    %value = affine.load %A[%i] : memref<?xi32>
+    %next = arith.addi %acc, %value : i32
+    affine.yield %next : i32
+  }
+  return %sum : i32
+}
+```
+
+仿射表达式提供分析信息，但不能自动证明所有循环变换合法；交换、融合和并行化仍须检查读写依赖、别名和副作用。分块与循环交换是不同变换，不能把 `affine-loop-tile` 的执行直接等同于任意循环顺序的交换。定义与限制见 [Affine 官方说明](https://mlir.llvm.org/docs/Dialects/Affine/)。
+
+### 3.2 SCF 方言
+
+SCF 表示结构化循环和分支。`scf.for` 的上下界、步长是类型一致的 SSA 整数或 index 值，步长须满足操作的合法性要求；循环携带的值由 `iter_args` 输入并由 `scf.yield` 返回。
+
+```mlir
+func.func @sum_scf(%A: memref<?xi32>, %n: index) -> i32 {
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+  %zero = arith.constant 0 : i32
+  %sum = scf.for %i = %c0 to %n step %c1 iter_args(%acc = %zero) -> (i32) {
+    %value = memref.load %A[%i] : memref<?xi32>
+    %next = arith.addi %acc, %value : i32
+    scf.yield %next : i32
+  }
+  return %sum : i32
+}
+```
+
+循环不变代码外提仍需要副作用、别名和可推测执行性证明。动态边界不等于所有依赖分析或循环变换都失效；可实施的优化取决于可证明的访问关系。一般的 `break` / `continue` 不能直接作为 `scf.for` 的任意跳转，可使用相应的结构化改写、`scf.while` 或降低到 CF。详见 [SCF 官方说明](https://mlir.llvm.org/docs/Dialects/SCFDialect/)。
+
+### 3.3 CF 方言
+
+CF 用显式基本块和分支表达控制流。MLIR 的块参数对应 LLVM IR 中 `phi` 表达的边上取值；它们不是需要内存加载的地址。
+
+```mlir
+func.func @sum_cf(%A: memref<?xi32>, %n: index) -> i32 {
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+  %zero = arith.constant 0 : i32
+  cf.br ^loop(%c0, %zero : index, i32)
+^loop(%i: index, %acc: i32):
+  %condition = arith.cmpi slt, %i, %n : index
+  cf.cond_br %condition, ^body, ^exit(%acc : i32)
+^body:
+  %value = memref.load %A[%i] : memref<?xi32>
+  %next_sum = arith.addi %acc, %value : i32
+  %next_i = arith.addi %i, %c1 : index
+  cf.br ^loop(%next_i, %next_sum : index, i32)
+^exit(%result: i32):
+  return %result : i32
+}
+```
+
+这里 `%A` 保留 `memref` 类型，`memref.load` 的下标是 `index`；不能把 `index` 类型的裸地址直接当成 memref 加载。CF 只说明控制流已显式化，不意味着所有操作已经一一对应机器指令。内联和跨过程优化仍可在含函数与 CFG 的表示上执行。详见 [CF 官方说明](https://mlir.llvm.org/docs/Dialects/ControlFlowDialect/)。
+
+### 3.4 Lowering 与选型
 
 ```mermaid
 flowchart LR
-  T[ToyC Dialect] --> A[Arith / Affine / SCF / CF / Func]
-  A --> M[MemRef / LLVM Dialect]
-  M --> R[RISC-V 或 LLVM 后端]
+  A[Affine] -->|lower-affine| S[SCF 等较低层操作]
+  S -->|convert-scf-to-cf| C[显式 CFG 与块参数]
+  C --> L[转换 MemRef / Func / Arith 等至 LLVM 方言]
+  L --> I[翻译为 LLVM IR]
+  I --> M[目标代码生成]
 ```
 
-- **Dialect**：一组相关的 Operation、Type 和 Attribute 的命名空间，相当于"方言"。不同方言拥有不同的合法操作集合，例如 `affine.load` 只接受 `memref`，`scf.for` 接受任何 Value。
-- **Operation**：基本计算单元，可以嵌套 Region。
-- **Region**：一段可能被控制流跳过的 Operation 序列（如循环体、函数体）。
-- **Block**：直线性指令序列，以终结符（如 `scf.yield`、`cf.br`）结尾。
-- **Value**：SSA 值，由某条 Operation 定义。
+MLIR 提供相应转换 pass，但使用时须满足输入操作的合法性、类型转换和 pass 顺序，不能只凭方言名称推断转换已经完成。降低结构化循环时把迭代值变为块参数，随后翻译到 LLVM IR 才表达为 `phi`；SCF 到 CF 的转换不需要先从 CFG 反向识别循环。
 
-不同抽象层通过 lowering pass 转换，例如 ToyC 方言可以先保留 `toy.if` 和 `toy.call`，再降低为 `scf.if`、`func.call` 和 LLVM Dialect。
-
-### .1 三个核心结构化控制流方言：Affine / SCF / CF
-
-MLIR 提供了三个层次的"结构化控制流"方言，它们表达循环与分支的能力不同，能写的优化也不同。三者的关系是"由高到低逐步 lowering"：
-
-```mermaid
-flowchart TB
-  subgraph High["高层：保留抽象信息"]
-    AFF[Affine Dialect<br/>affine.for / affine.if / affine.load]
-  end
-  subgraph Mid["中层：通用结构化控制流"]
-    SCF[SCF Dialect<br/>scf.for / scf.while / scf.if]
-  end
-  subgraph Low["底层：显式控制流图"]
-    CF[CF Dialect<br/>cf.br / cf.cond_br / cf.switch]
-  end
-  AFF -- "loop tiling / fusion / 内存消歧义后" --> SCF
-  SCF -- "结构化降低 / 反向扫描转 BasicBlock" --> CF
-  CF -- "Instruction Selection" --> L[LLVM Dialect / 机器码]
-```
-
-下面对每层做具体介绍，并用一个 ToyC 矩阵乘法例子贯穿三层。
-
-#### 4.1.1 Affine Dialect：保留访问关系式
-
-Affine 方言的循环和内存访问都必须用仿射表达式（affine expression，形如 `d0 * 16 + d1 + 32`）描述，循环边界也是仿射的：
-
-```mlir
-// 对应 ToyC: for i in [0, M): for j in [0, N): A[i][j] = ...
-%sum = affine.for %i = 0 to 16 iter_args(%acc = %init) -> (i32) {
-  %tmp = affine.for %j = 0 to 16 iter_args(%acc2 = %acc) -> (i32) {
-    // 注意 load 的下标是 affine.map，能被分析出"依赖关系"
-    %a = affine.load %A[%i, %j] : memref<16x16xi32>
-    %b = affine.load %B[%i, %j] : memref<16x16xi32>
-    %r = arith.addi %a, %b : i32
-    affine.yield %r : i32
-  }
-  affine.yield %tmp : i32
-}
-```
-
-关键特性：`affine.load %A[%i, %j]` 中的下标是符号表达式而不是已经算出的整数 Value。这意味着 MLIR 的 `AffineAnalysis` 能做下列在 SCF/CF 层做不到的事：
-
-- 依赖分析（dependence analysis）：通过 Polyhedral 模型自动判断 `affine.load A[%i, %j]` 与 `affine.store A[%i+1, %j]` 是否存在写后读依赖，从而判断循环能否交换、能否并行。
-- 循环变换：tiling（分块）、interchange（交换）、fusion（融合）、skewing（斜化）都能用 `affine.for` 上的属性直接重写，不用改下标。
-- 内存消歧义：当下标是仿射时，编译器可以证明两次 `affine.load` 不会访问同一地址，从而放心做标量替换、向量化和提升到寄存器。
-
-优化举例：
-
-```mlir
-// 原代码：朴素三重循环，i、j、k 顺序未优化
-affine.for %i = 0 to 128 {
-  affine.for %j = 0 to 128 {
-    affine.for %k = 0 to 128 {
-      %a = affine.load %A[%i, %k] : memref<128x128xf32>
-      %b = affine.load %B[%k, %j] : memref<128x128xf32>
-      %c = affine.load %C[%i, %j] : memref<128x128xf32>
-      %x = arith.mulf %a, %b : f32
-      %y = arith.addf %x, %c : f32
-      affine.store %y, %C[%i, %j] : memref<128x128xf32>
-    }
-  }
-}
-```
-
-使用 `affine-loop-tile` pass 把 `i, j` 做 32×32 分块、并把 `k` 放到外层（loop interchange），得到：
-
-```mlir
-// 分块并交换后：对 32x32 的子矩阵完整计算，便于放进 L1 cache
-affine.for %ii = 0 to 128 step 32 {
-  affine.for %jj = 0 to 128 step 32 {
-    affine.for %k = 0 to 128 {
-      affine.for %i = %ii to %ii + 32 {
-        affine.for %j = %jj to %jj + 32 {
-          ...
-        }
-      }
-    }
-  }
-}
-```
-
-**优点**
-
-1. 依赖分析可用于检查循环分块、交换与融合的合法性；满足变换条件时，相应 pass 可以优化原始循环。
-2. 多面体模型能识别 `A[i][k]` 和 `B[k][j]` 的访问模式，做出 SCF 层无法做到的 cache-friendly 重排。
-3. 可通过 MemRef 的布局描述表达分块后的数据访问。
-
-**缺点**
-
-1. 要求所有循环边界与下标都是仿射的，动态步长（如 `for i = 0; i < n; i++`，`n` 是运行时变量且与 `i` 无线性关系）就要 fallback 到 SCF。
-2. 多面体分析的编译时间和内存代价与循环嵌套深度、维度呈指数关系，深层循环会明显变慢。
-3. 难以表达数据相关的控制流（如 `if (ptr != nullptr)`），要回退到 SCF/CF。
-
-#### .1.2 SCF Dialect：通用结构化控制流
-
-SCF（Structured Control Flow）是 Affine 的"通用版"：循环边界、步长和迭代变量可以是任意 SSA Value，但代价是失去了多面体依赖分析能力：
-
-```mlir
-// 动态步长循环：n 是函数参数，affine 不能表达
-%res = scf.for %i = %c0 to %n step %c1 iter_args(%acc = %c0_i32) -> (i32) {
-  %cond = arith.cmpi slt, %i, %n : index
-  %v = scf.if %cond -> (i32) {
-    %a = memref.load %A[%i] : memref<?xi32>
-    scf.yield %a : i32
-  } else {
-    scf.yield %c0_i32 : i32
-  }
-  %next = arith.addi %acc, %v : i32
-  scf.yield %next : i32
-}
-```
-
-关键特性：
-
-- 循环和分支必须结构化嵌套（每个 `scf.for` 的 body 必须是单个 Region，没有任意跳转），所以数据流分析时天然存在支配关系。
-- `iter_args` 把 SSA 值显式穿过循环边界，等价于 LLVM IR 的 `phi` 节点，但是形式上是函数式（`yield` 显式返回），更容易做不动点计算。
-- 可以处理任意动态边界，但编译器只能做"基于 SSA use-def 的常规优化"，多面体分析失效。
-
-适合做的优化：
-
-- 循环不变代码外提（LICM）：因为 `scf.for` body 是 Region，标准的不动点算法能高效识别"在循环中不被修改的 load"并外提。
-- 归纳变量强度削减（IV Strength Reduction）：`scf.for %i` 的归纳变量经过若干轮扫描后能识别为仿射，下标 `memref.load %A[%i]` 的最终步长可以换算成 `addi` + 指针递推。
-- 循环展开与向量化：`scf.for` 有显式步长，向量化 pass 直接按 SIMD 宽度拆分。
-- 死代码消除 / 死循环消除：因为所有分支必须汇合到 `scf.yield`，更容易发现不可达分支。
-
-举例：ToyC 中常见 `for (int i = 0; i < n; i++) sum += A[i];`：
-
-```mlir
-// SCF 表示
-%sum = scf.for %i = %c0 to %n step %c1 iter_args(%acc = %c0_i32) -> (i32) {
-  %a = memref.load %A[%i] : memref<?xi32>
-  %next = arith.addi %acc, %a : i32
-  scf.yield %next : i32
-}
-```
-
-经过 LICM 与强度削减后，等价于：
-
-```mlir
-// 优化后：循环外预先算好 base 指针，循环内只用 addi 推进指针
-%base = memref.cast %A : memref<?xi32> to memref<?xi32, offset: ?, strides: [1]>
-%ptr = memref.extract_aligned_pointer_as_index %base : index
-%end = arith.addi %ptr, %n : index
-%cur = arith.addi %ptr, %c0 : index
-%sum = scf.while ... // 指针循环，4~5 条指令完成原本 1 条 load + add
-```
-
-**优点**
-
-1. 表达力强，能覆盖几乎所有 C 语言控制流（除了 `goto`）。
-2. `iter_args` + `yield` 的 SSA 风格让数据流分析易于实现。
-3. Pass 生态成熟，`-canonicalize`、`-cse`、`-licm`、`-loop-invariant-code-motion`、`-affine-loop-invariant-code-motion` 都直接适用。
-
-**缺点**
-
-1. 循环边界如果是动态值，无法做多面体依赖分析，所以 tiling/interchange/fusion 等需要依赖信息的优化都做不了。
-2. 结构化要求意味着 `break`、`continue` 这类中途跳转必须降低为 `cf.cond_br`，降低后 SSA 重命名与 PHI 插入由后续 pass 完成。
-3. `scf.for` 不能直接表达"两个循环并行执行"（OpenMP-style），要么手动展开，要么显式加注释驱动后续并行 pass。
-
-#### 3.1.3 CF Dialect：显式控制流图
-
-CF（Control Flow）方言模拟 LLVM IR 的基本块 + 显式 `br` / `cond_br`，是最接近汇编的一层：
-
-```mlir
-// 把 scf.for 完全降低后的样子：每个基本块显式 bb0/bb1/bb2，
-// 循环条件用 cf.cond_br，跳转目标用 cf.br 显式写
-cf.br ^bb1(%c0_i32, %ptr : i32, index)
-^bb1(%i: i32, %cur: index):
-  %cond = arith.cmpi slt, %i, %n : i32
-  cf.cond_br %cond, ^bb2(%i, %cur : i32, index), ^bb3
-^bb2(%i_next: i32, %cur_next: index):
-  %a = memref.load %cur_next[] : memref<i32, offset: ?>
-  %sum_next = arith.addi %sum, %a : i32
-  %i_inc = arith.addi %i_next, %c1 : i32
-  %cur_inc = arith.addi %cur_next, %c1 : index
-  cf.br ^bb1(%i_inc, %cur_inc : i32, index)
-^bb3:
-  // 退出循环
-```
-
-**关键特性**：
-
-- 基本块之间是任意外部边，存在支配关系但没有结构化嵌套保证。
-- 没有 `iter_args` / `yield`，需要用传统 SSA 的 PHI 风格（MLIR 中表现为基本块参数列表）。
-- 与 LLVM IR / 机器码几乎 1:1 对应，是后端 lowering 的最后一步。
-
-**适合做的优化**：
-
-- 基本块局部优化：窥孔优化（`cmp + br` 折叠成 `bnez`）、跳转线程（jump threading）、空块消除。
-- 分支预测友好化：重排冷热基本块、把 `cold` 路径放到函数末尾。
-- 指令选择（ISel）：直接对应 LLVM SelectionDAG / GlobalISel 的输入。
-- 寄存器分配的活跃变量分析：CFG 形式是构造 interference graph 的前提。
-
-举例：把上一节的 SCF 循环降低到 CF 后，可以再做窥孔优化把"`icmp slt + cond_br + addi + addi + br`"折叠为"`addiw + blt`"两条 RISC-V 指令。
-
-**优点**
-
-1. 与 LLVM IR / 机器码一一对应，指令选择和寄存器分配只需要这一层。
-2. 完全显式，无隐藏的迭代语义，便于调试后端问题。
-3. 支持任意图结构（goto、异常跳转、多入口），是 C 语言以外的语言（如带有协程的语言）的最终落脚点。
-
-**缺点**
-
-1. 没有循环语义，所有循环优化都要先"反向重建"循环结构（LoopInfo、LoopPass），实现成本高。
-2. 每次降低到 CF 都会丢失高层信息：循环嵌套、归纳变量、不变表达式等都需要重新分析。
-3. 难以做跨函数的 inlining / 跨过程优化，因为 CFG 的"循环"和"调用关系"是不同抽象层。
-4. 错误处理恢复困难：基本块参数（PHI）破坏"指令可任意重排"的不变性。
-
-#### .1.4 三层对比表
-
-| 维度 | Affine | SCF | CF |
-|---|---|---|---|
-| 循环边界类型 | 仿射表达式 | 任意 SSA Value | 已降低为 CFG |
-| 内存下标类型 | 仿射 map | 任意 SSA Value | 已 lower 为指针算术 |
-| 依赖分析 | 多面体（自动） | 基于 SSA use-def | 需要重建 LoopInfo |
-| 典型优化 | tiling / interchange / fusion / 自动并行 | LICM / IV 削减 / 展开 / 向量化 | 窥孔 / 跳转线程 / 冷热块重排 / 寄存器分配 |
-| 适用循环 | 边界和下标静态已知 | 任意动态边界 | 所有 |
-| 适合的下游 | MemRef lowering | CF / LLVM Dialect | 机器码 |
-
-
-
-### 3.2 MLIR 的优点与局限
-
-MLIR 仅作参考架构，ToyC 项目禁止集成 MLIR。下面说明多层抽象对理解编译器的价值，以及它本身的工程负担。
-
-优点
-
-- 分阶段优化：保留结构化循环时，可分析循环边界和迭代变量，并在满足依赖条件时进行循环外提、强度削减等变换。降低为 CF 后，相关分析需要依据基本块与控制流重建循环信息。
-- 保留高层结构：可以定义 `toy.while` operation 让它先保留在 ToyC 方言里，到第二阶段再统一 lowering 为 `scf.while`、到第三阶段降为 CF。源语言的高层结构与后端 lowering 是解耦的。
-- 易于扩展语句：ToyC 加新语句（如 `print_arr`）只需写一个 ToyC Dialect 的新 operation 与一次 lowering pass，不用动后端。后端只看到 `func.call @toy_print_arr`，能直接复用已有 calling-convention 修复。
-- 兼容 LLVM 后端：MLIR 可通过 `SCF/CF → LLVM Dialect → LLVM IR` 逐步降低，再由 LLVM 后端生成目标代码。课程项目仅参考这一结构，不调用 LLVM 或 MLIR 完成代码生成。
-
-局限
-
-- 小型项目的实现成本：为简单语言建立完整的 Dialect 和转换框架，需要额外定义操作、类型和转换规则；自定义三地址码通常更容易实现和调试。
-- IR 合法性约束强：每个 lowering 阶段都必须保持 IR 合法。例如把 SCF 降为 CF 时必须把 `iter_args` 显式转换为基本块参数并正确计算支配关系，否则 verify 失败；如果手工写错一处，会出现难以定位的崩溃。
-- 跨方言转换不自动：`Affine → SCF` 容易（依赖分析能跑），但 `SCF → CF` 涉及循环结构识别与 PHI 插入，实现难度较大。
-- 构建成本高：MLIR 通常作为 LLVM 项目的一部分构建，体量几十 GB；用 `apt` 安装的发行版二进制往往版本对不上，建议用源码构建或预编译的 release。
-
-## 四、选型建议
-
-ToyC 编译器全程禁止引入任何第三方运行时库（包括 LLVM、MLIR 等）。以下表格仅说明各方案作为"参考架构"时的定位；无论选择哪一种，IR 生成、优化和代码输出模块都必须自行实现。
-
-| 方案 | 适合情况 | 参考价值 | 工程约束 |
-|---|---|---|---|
-| 自定义三地址码 | 希望专注 AST 转换、优化和后端 | 直接实现，全权控制 | 唯一允许的工程方案 |
-| LLVM IR | 希望借助现成 SSA 与后端（研究参考） | 理解 SSA、phi、mem2reg、calling convention | 禁止集成，仅作参考 |
-| MLIR | 希望保留高层结构并展示多阶段 lowering（研究参考） | 理解 Dialect、Region、Affine/SCF/CF lowering 层次 | 禁止集成，仅作参考 |
-
-无论选择哪一种方案，最终报告都要给出同一个 ToyC 程序在 IR 中的完整表示，并说明 IR 如何进入第四部分优化和第五部分目标代码生成。
+对课程项目，可参考上述分层设计而实现自己的数据结构和转换算法。选择 LLVM 风格的文本 IR 不意味着必须链接 LLVM 库；自定义三地址码与自行维护的 LLVM 风格 IR 都需要自行实现优化、指令选择、寄存器分配和调用约定。

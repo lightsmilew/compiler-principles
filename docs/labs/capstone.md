@@ -49,8 +49,8 @@ import CourseMap, {CompilerPipeline} from '@site/src/components/CourseMap';
 
 | 项目 | 权重 | 说明 |
 | --- | ---: | --- |
-| 功能评测 | 68% | 20 组功能样例，每组 5 分；检查生成的 RV64GC 汇编能否正确运行。词法和语法只通过最终运行结果检查。 |
-| 性能评测 | 12% | 10 组性能样例，每组 10 分；重点观察目标代码生成、IR 优化和目标代码优化的运行效率。 |
+| 功能评测 | 68% | 检查生成的 RV64GC 汇编能否正确运行。词法和语法只通过最终运行结果检查。 |
+| 性能评测 | 12% | 重点观察目标代码生成、IR 优化和目标代码优化的运行效率。 |
 | 实验报告与设计说明 | 20% | LLVM IR/SSA、代码生成、优化、寄存器分配、测试与小组分工。 |
 
 评测部分内部按功能 `85%`、性能 `15%` 计算，最终成绩为"评测得分 `80%` + 报告得分 `20%`。
@@ -106,6 +106,8 @@ ToyC 源文件统一使用 `.c` 后缀（与 C 语言一致，便于工具链识
 **示例**：
 
 ```bash
+# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
+# qemu-riscv64 命令也在此终端输入，由 QEMU 执行 RISC-V 程序
 ./compiler -asm < input.c > input.s
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
   -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
@@ -114,27 +116,48 @@ qemu-riscv64 ./input < input.in > result.out  # result.out 是 ToyC 程序的 st
 
 **完整虚拟机开发环境**
 
-需要完整 Linux 环境时，使用 qemu-system 启动虚拟机：
+需要完整 RISC-V Linux 环境时，可以使用已经准备好的 Ubuntu RISC-V 镜像启动虚拟机。以下步骤分开在开发主机与虚拟机内执行：
 
 ```bash
+# 执行位置：WSL / Ubuntu 开发主机终端 A
+# 在镜像所在目录启动；镜像文件名和 U-Boot 路径按实际安装位置调整
+# 保持此终端运行 QEMU，在另一个开发主机终端执行后续命令
 qemu-system-riscv64 \
   -machine virt \
-  -cpu rv64gc \
+  -cpu rv64 \
   -nographic -m 4G -smp 4 \
   -kernel /usr/lib/u-boot/qemu-riscv64_smode/uboot.elf \
   -device virtio-net-device,netdev=eth0 \
   -netdev user,id=eth0,hostfwd=tcp::2222-:22 \
   -device virtio-rng-pci \
   -drive file=ubuntu-24.04-riscv64.img,format=raw,if=virtio
+```
 
-# SSH 连接后使用 Linux 工具链
+等待虚拟机启动且 SSH 服务可用后，在另一个开发主机终端传文件并登录；账号与密码以镜像配置为准：
+
+```bash
+# 执行位置：WSL / Ubuntu 开发主机终端 B（编译器项目根目录）
+# 开发主机与虚拟机的目录各自独立，先复制前面生成的汇编、测试输入和运行时库
+scp -P 2222 input.s input.in third_party/toyc/libtoyc.a ubuntu@localhost:~/
+# 此命令在开发主机输入；登录成功后，当前终端进入 QEMU 虚拟机
 ssh -p 2222 ubuntu@localhost
-# 首次登录后安装编译工具
+```
+
+登录成功后，在 SSH 会话中执行：
+
+```bash
+# 执行位置：QEMU 虚拟机内的 RISC-V Ubuntu 终端（SSH 登录后）
+# 首次登录后安装虚拟机内的编译工具
 sudo apt-get update
 sudo apt-get install gcc gdb
-riscv64-linux-gnu-gcc -march=rv64gc -mabi=lp64d \
+cd ~
+# 使用虚拟机内的原生 RISC-V GCC 链接
+gcc -march=rv64gc -mabi=lp64d \
   -nostdlib -static input.s libtoyc.a -o input
+# 在 RISC-V 虚拟机内直接运行目标程序
 ./input < input.in
+# 结束 SSH 会话，返回开发主机终端 B；终端 A 中的 QEMU 继续运行
+exit
 ```
 :::
 
@@ -149,12 +172,15 @@ riscv64-linux-gnu-gcc -march=rv64gc -mabi=lp64d \
 示例（第一部分，词法）：
 
 ```bash
+# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
 ./compiler -token < input.c > input.token
 ```
 
 示例（第四部分，汇编链接与运行）：
 
 ```bash
+# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
+# qemu-riscv64 命令也在此终端输入，由 QEMU 执行 RISC-V 程序
 ./compiler -asm < input.c > input.s
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
   -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
@@ -170,19 +196,23 @@ qemu-riscv64 ./input < input.in > result.out  # result.out 是 ToyC 程序 stdou
 课程组要求的命令行接口（必须全部支持）：
 
 ```bash
-./compiler [选项] < input.c
+# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
+# 调用格式：./compiler [选项] < input.c
+# 示例：生成汇编
+./compiler -asm < input.c > input.s
 
-选项：
-  -token    输出词法单元流：每行一个 Token，格式 <序号>:<类型>:<内容>
-  -ast      语法检查：无语法错误输出 accept，有错误输出 reject 与出错行号
-  -asm      输出 RV64GC 目标汇编代码
-  -opt      优化开关，与 -asm 组合使用，启用已实现的优化
+# 选项：
+#   -token    输出词法单元流：每行一个 Token，格式 <序号>:<类型>:<内容>
+#   -ast      语法检查：无语法错误输出 accept，有错误输出 reject 与出错行号
+#   -asm      输出 RV64GC 目标汇编代码
+#   -opt      优化开关，与 -asm 组合使用，启用已实现的优化
 ```
 
 :::info[输入输出一律走标准流]
 编译器只从 stdin 读源程序、只往 stdout 写阶段结果，不要直接打开 `input.c`、`output.s` 之类的固定文件名。这样评测脚本才能用重定向统一驱动：
 
 ```bash
+# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
 ./compiler -token < input.c > input.token
 ./compiler -asm    < input.c > input.s
 ```
@@ -196,6 +226,7 @@ qemu-riscv64 ./input < input.in > result.out  # result.out 是 ToyC 程序 stdou
 `-ir` 不是必要接口，评测脚本不会调用。可以自行为本地调试提供它，输出 LLVM IR；`-ir -opt` 是输出优化后 IR 的组合调用，不是单独的选项：
 
 ```bash
+# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
 ./compiler -ir < input.c > input.ll           # 可选调试接口
 ./compiler -ir -opt < input.c > input.opt.ll   # 可选调试接口的组合调用
 ```
