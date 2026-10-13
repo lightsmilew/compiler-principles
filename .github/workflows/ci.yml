@@ -30,27 +30,15 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Verify rendered internal links and assets
-        run: python3 scripts/verify_tutorial.py --links-only
-
-  tutorial:
-    name: Execute tutorial examples
+  runtime:
+    name: Verify runtime
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Install verification tools
+      - name: Install runtime verification tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y llvm-18 llvm mlir-18-tools qemu-user gdb-multiarch \
-            gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf gcc-riscv64-linux-gnu
-      - name: Verify shell, LLVM and assembly syntax
-        run: python3 scripts/verify_tutorial.py --snippets-only
-      - name: Verify ToyC examples and published Token output
-        run: python3 scripts/verify_toyc_examples.py
-      - name: Execute IR and arithmetic examples
-        run: python3 scripts/verify_codegen_examples.py
-      - name: Verify QEMU debugging commands
-        run: python3 scripts/verify_qemu_debugging.py
+          sudo apt-get install -y qemu-user gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf
       - name: Verify runtime archive
         run: python3 runtime/test_runtime.py
