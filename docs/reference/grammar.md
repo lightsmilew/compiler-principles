@@ -5,54 +5,17 @@ title: ToyC 词法与文法约定
 description: ToyC 语言的词法、上下文无关文法与语义约束
 ---
 
+import ToyCGrammar from '@site/src/components/ToyCGrammar';
+
 # ToyC 词法与文法约定
 
 全部实验共用同一门语言 ToyC。本节给出的定义是各实验测试用例的唯一依据。
 
 ## 一、上下文无关文法
 
-下面使用 EBNF 记号：`*` 表示重复零次或多次，`?` 表示可选。
+下面使用 EBNF 记号：`[ ... ]` 表示可选，`*` 表示重复零次或多次，`+` 表示重复一次或多次，`|` 表示选择；单引号中的内容是终结符。
 
-```text
-CompUnit    -> FuncDef+
-
-FuncDef     -> ('int' | 'void') ID '(' [ Param (',' Param)* ] ')' Block
-Param       -> 'int' ID
-
-Block       -> '{' BlockItem* '}'
-BlockItem   -> Decl | Stmt
-
-Decl        -> VarDecl | ConstDecl
-VarDecl     -> 'int' VarDef (',' VarDef)* ';'
-VarDef      -> ID [ '=' Expr ]
-ConstDecl   -> 'const' 'int' ConstDef (',' ConstDef)* ';'
-ConstDef    -> ID '=' Expr
-
-Stmt        -> Block
-            | ';'
-            | Expr ';'
-            | ID '=' Expr ';'
-            | 'if' '(' Expr ')' Stmt [ 'else' Stmt ]
-            | 'while' '(' Expr ')' Stmt
-            | 'break' ';'
-            | 'continue' ';'
-            | 'return' [ Expr ] ';'
-
-Expr        -> LOrExpr
-LOrExpr     -> LAndExpr | LOrExpr '||' LAndExpr
-LAndExpr    -> RelExpr | LAndExpr '&&' RelExpr
-RelExpr     -> AddExpr
-            | RelExpr ('<' | '>' | '<=' | '>=' | '==' | '!=') AddExpr
-AddExpr     -> MulExpr
-            | AddExpr ('+' | '-') MulExpr
-MulExpr     -> UnaryExpr
-            | MulExpr ('*' | '/' | '%') UnaryExpr
-UnaryExpr   -> PrimaryExpr | ('+' | '-' | '!') UnaryExpr
-PrimaryExpr -> ID
-             | NUMBER
-             | '(' Expr ')'
-             | ID '(' [ Expr (',' Expr)* ] ')'
-```
+<ToyCGrammar />
 
 库函数调用不需要单独出现在文法中。`getint` 和 `putint` 仍按普通 `ID` 解析，
 由语义分析预置函数符号，由目标代码生成阶段生成外部调用。
@@ -131,7 +94,7 @@ const int limit = 10, step = 2;
 
 ### 语句与控制流
 
-空语句、表达式语句、赋值、声明、if-else、while、break、continue 和 return 的语义遵循 C 语言习惯。没有返回值的函数调用不能作为 if/while 条件或赋值右值；`break` 和 `continue` 只能出现在循环中。
+空语句、表达式语句、赋值、声明、if-else、while、break、continue 和 return 的语义遵循 C 语言习惯。`else` 与最近一个尚未匹配 `else` 的 `if` 配对。没有返回值的函数调用不能作为 if/while 条件或赋值右值；`break` 和 `continue` 只能出现在循环中。
 
 ### 表达式
 
@@ -145,10 +108,11 @@ const int limit = 10, step = 2;
 | 2 | `!` `+` `-`（一元） | 右 |
 | 3 | `*` `/` `%` | 左 |
 | 4 | `+` `-` | 左 |
-| 5 | `<` `>` `<=` `>=` | 左 |
-| 6 | `==` `!=` | 左 |
-| 7 | `&&` | 左 |
-| 8（最低） | `||` | 左 |
+| 5 | `<` `>` `<=` `>=` `==` `!=` | 左 |
+| 6 | `&&` | 左 |
+| 7（最低） | `||` | 左 |
+
+关系与相等运算符都由 `RelExpr` 处理，处于同一优先级层；表达式分析和 AST 构造以这份文法为准。
 
 ## 五、输出格式
 
@@ -166,7 +130,7 @@ const int limit = 10, step = 2;
 
 - 序号从 `0` 开始，按出现顺序递增；
 - 关键字、运算符、界符写成该符号本身并加单引号（`'int'`、`'<='`、`'('`）；标识符写作 `Ident`，十进制整数常量写作 `IntConst`；
-- 内容是该 Token 在源程序中的原始文本，用双引号括起；
+- 符号和标识符的内容是源程序中的原始文本，用双引号括起；`IntConst` 的内容直接写十进制数值，不加引号；
 - 空白和注释不产生 Token，所以序号是连续的。
 
 完整样例见[第一部分 · 词法分析](../labs/part1-lexer)的“输入输出规范与统一样例”。

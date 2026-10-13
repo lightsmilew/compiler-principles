@@ -2,14 +2,15 @@ import type {ReactNode} from 'react';
 import Link from '@docusaurus/Link';
 import Layout from '@theme/Layout';
 import Heading from '@theme/Heading';
+import CompilerShowcase from '@site/src/components/CompilerShowcase';
 import styles from './index.module.css';
 
 const labs = [
-  {title: '词法分析', label: 'LEXICAL ANALYSIS', description: '使用正则表达式与自动机识别词法单元，将源程序转换为 Token 流。', from: 'Source', to: 'Token', path: 'part1-lexer', category: '编译器前端'},
-  {title: '语法分析', label: 'SYNTAX ANALYSIS', description: '依据 ToyC 文法检查 Token 流，构建抽象语法树并报告语法错误。', from: 'Token', to: 'AST', path: 'part2-parser', category: '编译器前端'},
+  {title: '词法分析', label: 'LEXICAL ANALYSIS', description: '源码里哪些是关键字，哪些是变量名？把字符读成 Token，编译就从这里开始。', from: 'Source', to: 'Token', path: 'part1-lexer', category: '编译器前端'},
+  {title: '语法分析', label: 'SYNTAX ANALYSIS', description: '为什么先算乘法？按 ToyC 文法构建 AST，把运算和语句的结构表达清楚。', from: 'Token', to: 'AST', path: 'part2-parser', category: '编译器前端'},
   {title: '中间代码生成', label: 'INTERMEDIATE REPRESENTATION', description: '设计中间表示，将 AST 转换为包含运算、访存和控制流的 IR。', from: 'AST', to: 'IR', path: 'part3-ir', category: '编译器前端'},
   {title: '目标代码生成', label: 'CODE GENERATION', description: '完成指令选择、栈帧布局与函数调用，将 IR 转换为 RV64GC 汇编。', from: 'IR', to: 'RISC-V', path: 'part4-codegen', category: '编译器后端'},
-  {title: 'IR 优化', label: 'IR OPTIMIZATION', description: '在保持语义不变的前提下，完成数据流分析、常量传播与死代码消除。', from: 'LLVM IR', to: 'Optimized IR', path: 'part5-ir-optimization', category: '优化进阶'},
+  {title: 'IR 优化', label: 'IR OPTIMIZATION', description: '在保持语义不变的前提下，完成数据流分析、常量传播与死代码消除。', from: 'IR', to: 'Optimized IR', path: 'part5-ir-optimization', category: '优化进阶'},
   {title: '目标代码优化', label: 'TARGET OPTIMIZATION', description: '面向 RISC-V 指令，练习寄存器分配、溢出处理与窥孔优化。', from: 'RISC-V', to: 'Optimized ASM', path: 'part6-target-optimization', category: '优化进阶'},
 ];
 
@@ -37,48 +38,27 @@ function CapstoneMark() {
   );
 }
 
-function CompilerPreview() {
-  return (
-    <div className={styles.preview} aria-label="ToyC 编译过程示意">
-      <div className={styles.windowBar}>
-        <span className={styles.windowDots} aria-hidden="true"><i /><i /><i /></span>
-        <span>ToyC 编译示例</span><span className={styles.previewTag}>ToyC</span>
-      </div>
-      <div className={styles.editor}>
-        <div className={styles.fileLabel}><span>源程序</span><span>main.c</span></div>
-        <pre><code><span className={styles.keyword}>int</span>{' main() {\n'}{'  '}<span className={styles.keyword}>int</span>{' answer = '}<span className={styles.number}>40</span>{' + '}<span className={styles.number}>2</span>{';\n  '}<span className={styles.keyword}>return</span>{' answer;\n}'}</code></pre>
-      </div>
-      <div className={styles.pipeline} aria-label="词法分析、语法分析、中间表示、代码生成">
-        {['Token', 'AST', 'IR', 'ASM'].map((item, index) => <span key={item}><b>{item}</b>{index < 3 && <Arrow />}</span>)}
-      </div>
-      <div className={styles.assembly}>
-        <div className={styles.fileLabel}><span>目标代码 · 优化后示意</span><span>RISC-V</span></div>
-        <pre><code>{'main:\n    '}<span className={styles.instruction}>li</span>{'    a0, 42\n    '}<span className={styles.instruction}>ret</span></code></pre>
-      </div>
-      <div className={styles.previewFooter}><span><i /> 常量表达式优化示例</span><span>return 42</span></div>
-    </div>
-  );
-}
-
 export default function Home(): ReactNode {
   return (
-    <Layout title="编译原理实验" description="以 ToyC 为起点，完成从词法分析、LLVM IR 到 RISC-V 目标代码生成的编译器实践。">
+    <Layout title="编译原理实验" description="实现自己的 ToyC 编译器：词法与语法分析、中间表示、RISC-V 代码生成和优化。">
       <main className={styles.home}>
         <header className={styles.hero}>
           <div className={styles.container}>
-            <div className={styles.heroGrid}>
-              <div>
-                <div className={styles.eyebrow}><span className={styles.statusDot} /> 编译系统实践 · ToyC 到 RISC-V</div>
-                <Heading as="h1" className={styles.title}>编译系统实践<br /><span>ToyC 编译器实验</span></Heading>
-                <p className={styles.subtitle}>实验包括词法分析、语法分析、中间代码生成与优化；<br className={styles.desktopBreak} />目标平台为 RISC-V 64GC，使用 QEMU 验证运行结果。</p>
+            <svg className={styles.heroLines} viewBox="0 0 1400 700" fill="none" aria-hidden="true">
+              <g stroke="currentColor" strokeWidth="1">
+                <path d="M-50 540C250 640 420 210 1400 120M-50 562C250 650 470 230 1400 145M-50 584C250 660 520 250 1400 170M-50 606C250 670 570 270 1400 195M-50 628C250 680 620 290 1400 220M-50 650C250 690 670 310 1400 245" />
+              </g>
+            </svg>
+            <div className={styles.heroIntro}>
+                <Heading as="h1" className={styles.title}>写个编译器，<br /><span>看看代码怎么跑。</span></Heading>
+                <p className={styles.subtitle}>从 ToyC 源码到 RISC-V 汇编，动手实现一个编译器。</p>
                 <div className={styles.actions}>
                   <Link className={styles.primaryButton} to="/docs/labs/part1-lexer">开始实验 <Arrow /></Link>
-                  <Link className={styles.secondaryButton} to="/docs/labs/capstone">课程总览 <Arrow diagonal /></Link>
+                  <Link className={styles.secondaryButton} to="/docs/guide/environment">搭建开发环境 <Arrow diagonal /></Link>
                 </div>
-                <div className={styles.heroMeta}><span><strong>06</strong> 个递进实验</span><span><strong>60</strong> 课时课程安排</span><span>阶段产物可独立验证</span></div>
-              </div>
-              <CompilerPreview />
+                <div className={styles.heroMeta}><span><strong>06</strong> 个实验部分</span><span><strong>60</strong> 建议课时</span><span>目标平台 RV64GC</span></div>
             </div>
+            <div className={styles.showcaseWrap}><CompilerShowcase /></div>
             <div className={styles.techStrip}><span>语言与工具</span><div><span>ToyC</span><i /><span>C / C++ · Java · Rust</span><i /><span>IR</span><i /><span>RISC-V 64GC</span><i /><span>QEMU</span></div><span className={styles.stripNote}>源码 → 中间表示 → 汇编</span></div>
           </div>
         </header>

@@ -5,6 +5,8 @@ title: 第二部分 · 语法分析
 description: 根据 ToyC 文法构造 AST，比较递归下降、LL(1) 与 LR 分析方法
 ---
 
+import ToyCGrammar from '@site/src/components/ToyCGrammar';
+
 # 第二部分 · 语法分析
 
 ## 一、实验目标
@@ -38,34 +40,13 @@ flowchart TB
 
 ## 二、ToyC 核心文法
 
-下面使用 EBNF 记号：`*` 表示重复零次或多次，`?` 表示可选，`|` 表示选择。
+本部分使用[词法与文法约定](../reference/grammar)中的 ToyC 文法。下面的定义与文法页共用同一份内容，各实验的产生式、终结符名称、优先级和结合性都以它为准。
 
-```text
-CompUnit    -> FuncDef+
-FuncDef     -> ('int' | 'void') ID '(' [ Param (',' Param)* ] ')' Block
-Param       -> 'int' ID
-Block       -> '{' BlockItem* '}'
-BlockItem   -> Decl | Stmt
-Decl        -> VarDecl | ConstDecl
-VarDecl     -> 'int' VarDef (',' VarDef)* ';'
-VarDef      -> ID [ '=' Expr ]
-ConstDecl   -> 'const' 'int' ConstDef (',' ConstDef)* ';'
-ConstDef    -> ID '=' Expr
-Stmt        -> Block | ';' | Expr ';' | ID '=' Expr ';'
-             | 'if' '(' Expr ')' Stmt [ 'else' Stmt ]
-             | 'while' '(' Expr ')' Stmt
-             | 'break' ';' | 'continue' ';' | 'return' [ Expr ] ';'
-Expr        -> LOrExpr
-LOrExpr     -> LAndExpr | LOrExpr '||' LAndExpr
-LAndExpr    -> RelExpr | LAndExpr '&&' RelExpr
-RelExpr     -> AddExpr | RelExpr RelOp AddExpr
-AddExpr     -> MulExpr | AddExpr AddOp MulExpr
-MulExpr     -> UnaryExpr | MulExpr MulOp UnaryExpr
-UnaryExpr   -> PrimaryExpr | ('+' | '-' | '!') UnaryExpr
-PrimaryExpr -> ID | NUMBER | '(' Expr ')' | ID '(' [ Expr (',' Expr)* ] ')'
-```
+下面使用 EBNF 记号：`[ ... ]` 表示可选，`*` 表示重复零次或多次，`+` 表示重复一次或多次，`|` 表示选择；单引号中的内容是终结符。
 
-这是[文法页](../reference/grammar)的等价写法：`RelOp`、`AddOp`、`MulOp` 分别展开为文法页中对应的运算符集合；声明（含 `const`）和语句统一由 `BlockItem` 展开，后面写 FIRST/FOLLOW 集时会方便一些；ToyC 没有全局变量，`CompUnit` 只会展开出一串函数定义。库函数（`getint`、`putint` 等）仍按普通 `ID` 和函数调用解析，不加入文法特殊产生式。
+<ToyCGrammar />
+
+ToyC 没有全局变量，`CompUnit` 只展开为函数定义。`getint`、`putint` 按普通 `ID` 和函数调用解析，不为库函数增加特殊产生式。
 
 ## 三、从 Token 到 AST 的转换逻辑
 
@@ -96,7 +77,7 @@ flowchart TD
  1: parseExpr():                                    // Expr -> LOrExpr
  2:     return parseLOrExpr();
  3:
- 4: parseAddExpr():                                 // AddExpr -> MulExpr (('+' | '-') MulExpr)*
+ 4: parseAddExpr():                                 // AddExpr -> MulExpr | AddExpr ('+' | '-') MulExpr
  5:     left = parseMulExpr();
  6:     while peek() in { '+', '-' } do              // 左结合：用循环表达，而不是左递归
  7:         op = consume();
@@ -105,7 +86,7 @@ flowchart TD
 10:     end while
 11:     return left;
 12:
-13: parsePrimaryExpr():                            // PrimaryExpr -> ID | NUMBER | '(' Expr ')' | Call
+13: parsePrimaryExpr():                            // 处理 PrimaryExpr 的四个分支
 14:     if match(NUMBER) then
 15:         return Number(previous().value);
 16:     end if
@@ -122,77 +103,104 @@ flowchart TD
 27:     error("expected primary expression");           // 出错提示
 ```
 
-**为什么用循环而不是左递归？** 文法里写的是 `AddExpr -> AddExpr '+' MulExpr`（左递归）。直接写成函数会无限递归，所以要改写成循环（如上），或改写文法为 `E -> T E'`、`E' -> '+' T E' | ε`。两种写法等价，循环写法更直观。
+**为什么这里用循环？** `AddExpr` 的递归分支以自身开头，照着产生式直接调用 `parseAddExpr()` 会无限递归。实现时先读一个 `MulExpr`，再用循环读取后续的 `+`、`-` 和 `MulExpr`，每次把新节点接在已有 AST 的外层。这样仍按 ToyC 文法构造左结合的表达式。
 
 ### LL(1)：计算 FIRST / FOLLOW 集
 
-LL(1) 把递归函数中的“选哪个分支”变成查表：**用栈顶非终结符作为行、当前 Token 作为列，查出要展开的产生式。** 第一个 L 表示从左到右读输入，第二个 L 表示最左推导，1 表示只看一个向前看 Token。
+LL(1) 用栈顶非终结符和当前 Token 查预测分析表，决定接下来展开哪条产生式。第一个 L 表示从左到右读输入，第二个 L 表示最左推导，1 表示看一个向前看 Token。
 
-#### 先用小文法看清 FIRST 与 FOLLOW
+#### 从 ToyC 产生式构造预测分析器
 
-为了把注意力放在查表过程上，下面只分析 `a + b`，把两个标识符都记作终结符 `id`。这是一份教学用的表达式子文法，不是完整 ToyC 文法。
-
-原来的左递归 `E -> E + T | T` 不能直接用于 LL(1)，先改写为：
+继续看 `return a + b;` 中的表达式。ToyC 的 `AddExpr` 和 `MulExpr` 含左递归，构造 LL(1) 表前，需要为它们引入处理后续运算的辅助符号；`PrimaryExpr` 的两个 `ID` 分支也需要提取共同前缀：
 
 ```text
-(1) E  -> T E′
-(2) E′ -> + T E′
-(3) E′ -> ε
-(4) T  -> id
+AddExpr         -> MulExpr AddExprTail
+AddExprTail     -> '+' MulExpr AddExprTail
+                 | '-' MulExpr AddExprTail
+                 | ε
+MulExpr         -> UnaryExpr MulExprTail
+MulExprTail     -> '*' UnaryExpr MulExprTail
+                 | '/' UnaryExpr MulExprTail
+                 | '%' UnaryExpr MulExprTail
+                 | ε
+PrimaryExpr     -> ID PrimaryExprTail
+                 | NUMBER
+                 | '(' Expr ')'
+PrimaryExprTail -> '(' [ Expr (',' Expr)* ] ')'
+                 | ε
 ```
 
-`E′` 表示“读完一个项后，后面还有没有加法”；`ε` 表示这部分为空，`$` 表示输入结束。
+`AddExprTail`、`MulExprTail`、`PrimaryExprTail` 是预测分析器的辅助符号，分别记录加减运算、乘除运算和函数调用后缀。其余规则仍来自上面的 ToyC 文法。构造完整分析表时，`RelExpr`、`LAndExpr`、`LOrExpr` 也需要消除左递归，还需把 EBNF 的可选项和重复项展开为普通产生式。
 
-| 非终结符 | FIRST：这一部分可能以什么开头 | FOLLOW：这一部分结束后可能看到什么 |
+#### FIRST 与 FOLLOW 表示什么
+
+- **FIRST**：这一部分可以从哪些 Token 开始？
+- **FOLLOW**：这一部分读完后，哪些 Token 可以接在后面？
+
+例如，`PrimaryExpr` 可由标识符、整数或左括号开始；`UnaryExpr` 还可以由一元 `+`、`-`、`!` 开始。因此 `AddExpr`、`MulExpr` 的 FIRST 都包含 `ID`、`NUMBER`、`(`、`+`、`-`、`!`。
+
+为便于读表，记：
+
+```text
+F = { ID, NUMBER, '(', '+', '-', '!' }
+K = { '<', '>', '<=', '>=', '==', '!=', '&&', '||', ')', ',', ';' }
+```
+
+`K` 是完整加减表达式之后允许出现的 Token 集合，包括更低优先级的运算符和表达式结束位置。下表的 FOLLOW 按引入尾部符号后的预测分析规则计算；`F`、`K` 是集合名称。
+
+| 非终结符 | FIRST | FOLLOW |
 | --- | --- | --- |
-| `E` | `{ id }` | `{ $ }` |
-| `E′` | `{ +, ε }` | `{ $ }` |
-| `T` | `{ id }` | `{ +, $ }` |
+| `AddExpr` | `F` | `K` |
+| `AddExprTail` | `{ '+', '-', ε }` | `K` |
+| `MulExpr` | `F` | `K ∪ { '+', '-' }` |
+| `MulExprTail` | `{ '*', '/', '%', ε }` | `K ∪ { '+', '-' }` |
 
-例如，在 `E -> T E′` 中，`T` 后面跟着 `E′`：`E′` 可以以 `+` 开头，所以 `+` 进入 `FOLLOW(T)`；`E′` 也可以为空，所以 `E` 后面的 `$` 也进入 `FOLLOW(T)`。FOLLOW 不包含 `ε`。
+在 `AddExpr -> MulExpr AddExprTail` 中，`AddExprTail` 可以从 `+` 或 `-` 开始，所以这两个 Token 进入 `FOLLOW(MulExpr)`。尾部也可以为空，因此 `FOLLOW(AddExpr)` 同样进入 `FOLLOW(MulExpr)`。FOLLOW 中不包含 `ε`。
 
-#### 把集合变成预测分析表
+#### 把集合填进预测分析表
 
-填表时，对每条 `A -> α`：
+对每条 `A -> α`：
 
 1. 在 `FIRST(α)` 中每个非空终结符对应的列填入这条产生式；
-2. 若 `α` 能推出 `ε`，再把它填入 `FOLLOW(A)` 对应的列；
-3. 同一格若需要填两条不同产生式，就发生 LL(1) 冲突。
+2. 若 `α` 能推出 `ε`，在 `FOLLOW(A)` 对应的列也填入这条产生式；
+3. 同一格出现两条不同产生式，说明这里有 LL(1) 冲突。
 
-对上面的子文法，得到：
+下面只列加法层的表项，其余层按同样的方法构造。`K` 列代表集合中的每一个 Token。
 
-| 栈顶 / 当前 Token | `id` | `+` | `$` |
-| --- | --- | --- | --- |
-| `E` | (1) `E -> T E′` | 错误 | 错误 |
-| `E′` | 错误 | (2) `E′ -> + T E′` | (3) `E′ -> ε` |
-| `T` | (4) `T -> id` | 错误 | 错误 |
+| 栈顶 / 当前 Token | `ID`、`NUMBER`、`(`、`!` | `+` | `-` | `K` 中的 Token |
+| --- | --- | --- | --- | --- |
+| `AddExpr` | `MulExpr AddExprTail` | `MulExpr AddExprTail` | `MulExpr AddExprTail` | 错误 |
+| `AddExprTail` | 错误 | `'+' MulExpr AddExprTail` | `'-' MulExpr AddExprTail` | `ε` |
 
-关键在 `E′` 这一行：看到 `+` 就继续解析加法，看到 `$` 就结束，不需要猜测或回退。
+`AddExpr` 行中的 `+`、`-` 是一元运算符；`AddExprTail` 行中的 `+`、`-` 是跟在左操作数后面的二元运算符。同一个 Token 在不同栈顶下承担不同作用。
 
 ```mermaid
 flowchart LR
-  A["栈顶 E<br/>Token：id"] -->|"E → T E′"| B["逆序压栈<br/>$ E′ T"]
+  A["栈顶 AddExpr<br/>Token：ID(a)"] -->|"查预测表"| B["展开 MulExpr AddExprTail"]
+  B --> C["先分析 MulExpr<br/>再分析 AddExprTail"]
 ```
 
 #### 跟着栈解析一次 a + b
 
-栈在表中从左到右表示“栈底 → 栈顶”，最右边先处理；输入中的 `id` 仍携带 `a`、`b` 的词素信息，构造 AST 时不会丢失。
+栈从左到右表示“栈底 → 栈顶”。`Γ` 表示外层语句和表达式层的剩余栈；本例分析完 `AddExpr` 后，回到外层处理分号。`ID(a)`、`ID(b)` 表示携带词素的 `ID` Token。
+
+下表将若干连续展开合并在一行；实现中仍逐条查表、展开。
 
 | 步骤 | 分析栈 | 剩余输入 | 本步动作 |
 | ---: | --- | --- | --- |
-| 0 | `$ E` | `id + id $` | 查 `M[E, id]`，展开 (1) |
-| 1 | `$ E′ T` | `id + id $` | 查 `M[T, id]`，展开 (4) |
-| 2 | `$ E′ id` | `id + id $` | 匹配第一个 `id`，消耗 `a` |
-| 3 | `$ E′` | `+ id $` | 查 `M[E′, +]`，展开 (2) |
-| 4 | `$ E′ T +` | `+ id $` | 匹配 `+` |
-| 5 | `$ E′ T` | `id $` | 展开 (4) |
-| 6 | `$ E′ id` | `id $` | 匹配第二个 `id`，消耗 `b` |
-| 7 | `$ E′` | `$` | 选 (3)，弹出 `E′`，不消耗输入 |
-| 8 | `$` | `$` | 输入与栈同时结束，接受 |
+| 0 | `Γ AddExpr` | `ID(a) + ID(b) ;` | 展开为 `MulExpr AddExprTail`，逆序压栈 |
+| 1 | `Γ AddExprTail MulExpr` | `ID(a) + ID(b) ;` | 展开 `MulExpr`、`UnaryExpr`、`PrimaryExpr`，得到下一行的栈 |
+| 2 | `Γ AddExprTail MulExprTail PrimaryExprTail ID` | `ID(a) + ID(b) ;` | 匹配 `ID`，消耗 `a` |
+| 3 | `Γ AddExprTail MulExprTail PrimaryExprTail` | `+ ID(b) ;` | `PrimaryExprTail`、`MulExprTail` 在 `+` 上选空分支 |
+| 4 | `Γ AddExprTail` | `+ ID(b) ;` | 展开为 `'+' MulExpr AddExprTail` |
+| 5 | `Γ AddExprTail MulExpr '+'` | `+ ID(b) ;` | 匹配 `+` |
+| 6 | `Γ AddExprTail MulExpr` | `ID(b) ;` | 按步骤 1、2 的方式展开并匹配 `b` |
+| 7 | `Γ AddExprTail MulExprTail PrimaryExprTail` | `;` | 三个尾部在 `;` 上依次选空分支 |
+| 8 | `Γ` | `;` | 返回外层，表达式分析完成 |
 
-展开产生式不消耗 Token；只有匹配终结符才前进。`ε` 不入栈，也不消耗输入。
+展开产生式不消耗 Token，匹配终结符才前进。`ε` 不入栈，也不消耗输入。
 
-**构造 AST 要再加语义动作。** 改写后的 `E′` 是右递归尾部，但加法仍应保持左结合：收集尾部各个“操作符 + 项”，再从左向右组合。对 `a + b + c`，依次构造 `Binary('+', a, b)`，再把它作为下一次组合的左孩子。
+**AST 仍保持左结合。** `AddExprTail` 虽采用右递归记录尾部，构造 AST 时要从左向右组合。对 `a + b + c`，先构造 `Binary('+', a, b)`，再与 `c` 组合。
 
 ```mermaid
 flowchart TB
@@ -256,113 +264,123 @@ flowchart TB
 
 </details>
 
-**应用到 ToyC 时还需检查其它共同前缀。** 例如变量引用 `id` 与调用 `id(...)` 都以 `id` 开头，可先匹配 `id`，再由一个后缀非终结符处理 `(` 或空串。赋值语句与表达式语句的共同前缀、`else` 归属最近的未匹配 `if` 等，也需要明确的文法改写或消歧规则。只消除表达式左递归，并不自动保证整份 ToyC 文法是 LL(1)。
+完整的 ToyC 分析表还需处理赋值语句与表达式语句的共同前缀，以及 `else` 的归属。`else` 按文法页的约定匹配最近的未匹配 `if`。消除表达式左递归后，仍需检查整张表是否存在冲突。
 
 FIRST/FOLLOW 与预测表的定义可参见 [威斯康星大学语法分析讲义](https://pages.cs.wisc.edu/~fischer/cs536.s08/course.hold/html/NOTES/5.PARSING.html)。
 
 ### LR：项目集与分析表
 
-LR 采用自底向上分析：**将 Token 移入栈中，识别出产生式右部后，将其归约为左部非终结符。** LR 可以直接处理左递归文法。`ACTION` 决定移进、归约、接受或报错，`GOTO` 决定归约出一个非终结符后进入哪个状态。
+LR 从 Token 开始，自底向上归约出非终结符。`ACTION` 决定移进、归约、接受或报错，`GOTO` 决定归约后进入哪个状态。它可以保留 ToyC 文法中的左递归。
 
 #### 移进与归约分别做什么
 
-仍分析 `a + b`，这次直接保留左递归，使用增广文法：
+还是看 `return a + b;` 中的 `a + b`。它的分析会用到以下 ToyC 产生式，编号仅用于本例：
 
 ```text
-(0) S′ -> E
-(1) E  -> E + T
-(2) E  -> T
-(3) T  -> id
+(1) AddExpr     -> AddExpr '+' MulExpr
+(2) AddExpr     -> MulExpr
+(3) MulExpr     -> UnaryExpr
+(4) UnaryExpr   -> PrimaryExpr
+(5) PrimaryExpr -> ID
 ```
 
-移进把一个 Token 及其目标状态压入栈，并消耗输入。归约按 `A -> β` 弹出右部 `β`，构造 `A` 对应的值或 AST，再按 `GOTO` 压入新状态；归约不消耗当前 Token。
+这些规则是上面完整文法的分支，`-`、乘除、整数、括号和调用等分支也要进入实际分析器的项目集。构造 LR 表前，将 EBNF 的选择、可选项和重复项展开为普通产生式，开始符号仍是 `CompUnit`。
+
+- **移进**：把当前 Token 及目标状态压入栈，继续读下一个 Token。
+- **归约**：按 `A -> β` 弹出右部 `β`，构造 AST 或传递节点，再按 `GOTO` 压入 `A` 和新状态；当前 Token 不前进。
 
 ```mermaid
 flowchart LR
-  A["移进 id(a)<br/>栈顶是 id"] -->|"T → id<br/>E → T"| B["依次归约<br/>栈顶变为 E"]
+  A["移进 ID(a)"] --> B["归约为 PrimaryExpr"]
+  B --> C["UnaryExpr → MulExpr → AddExpr<br/>逐层传递节点 a"]
 ```
 
-#### 项目中的圆点到底表示什么
+#### 项目中的圆点表示什么
 
-`E -> E · + T` 表示已经识别了左边的 `E`，接下来期待 `+`；`E -> E + T ·` 表示右部已经完整，可以考虑归约。
+`AddExpr -> AddExpr · '+' MulExpr` 表示已经识别了左操作数，接下来期待 `+`；`AddExpr -> AddExpr '+' MulExpr ·` 表示右部已经完整，可以考虑归约。
 
-从 `S′ -> · E` 开始做 CLOSURE。因为圆点后是 `E`，加入 `E` 的两条产生式；新项目中圆点后又出现 `T`，继续加入 `T -> · id`，直到没有新项目：
+从 `CompUnit′ -> · CompUnit` 开始做 CLOSURE：圆点后若是非终结符，就加入它的各条产生式，并将圆点放在右部开头；不断补充，直到没有新项目。
+
+到达开始读取加法表达式的状态时，闭包需要包含 `AddExpr` 的所有分支，并继续展开 `MulExpr`、`UnaryExpr` 和 `PrimaryExpr`。例如，其中会有：
 
 ```text
-I0 = {
-    S′ -> · E
-    E  -> · E + T
-    E  -> · T
-    T  -> · id
-}
+AddExpr     -> · MulExpr
+AddExpr     -> · AddExpr '+' MulExpr
+AddExpr     -> · AddExpr '-' MulExpr
+MulExpr     -> · UnaryExpr
+UnaryExpr   -> · PrimaryExpr
+PrimaryExpr -> · ID
 ```
 
-`GOTO(I0, id)` 将 `T -> · id` 的圆点右移，得到 `I3 = { T -> id · }`。这里的 GOTO 是构造项目集的函数；运行时的 GOTO 表记录其中“非终结符”对应的状态转移。
+这里仅列与本例有关的项目。实际闭包还包含乘除、一元运算、整数、括号和调用等项目。`GOTO(J, X)` 把状态 `J` 中圆点后为 `X` 的项目右移一位，再取闭包，得到新的状态。
 
-下面这张图给出完整的六个状态，边的标签就是本次识别的文法符号：
+分析 `a + b` 时，两个 `ID` 都要逐层归约成 `MulExpr`。下图将连续归约合并展示：左操作数从 `s0` 开始，右操作数从读过 `+` 的 `sPlus` 开始，因此归约后查到的 GOTO 不同。状态标签用于讲解，具体编号由项目集构造顺序决定。
 
 ```mermaid
-flowchart TB
-  I0["I0<br/>起始闭包"] -->|E| I1["I1<br/>S′ → E ·<br/>E → E · + T"]
-  I0 -->|T| I2["I2<br/>E → T ·"]
-  I0 -->|id| I3["I3<br/>T → id ·"]
-  I1 -->|"+"| I4["I4<br/>E → E + · T<br/>T → · id"]
-  I4 -->|T| I5["I5<br/>E → E + T ·"]
-  I4 -->|id| I3
+flowchart LR
+  A["s0 或 sPlus<br/>等待操作数"] -->|"移进 ID"| B["sID → sPrimary → sUnary<br/>依次归约 (5)、(4)"]
+  B -. "归约 (3)，查 GOTO" .-> C["从 s0：进入 sMul<br/>从 sPlus：进入 sRightMul"]
 ```
 
-#### 从状态图填出 SLR(1) 表
+左操作数在 `sMul` 继续归约为 `AddExpr`，进入 `sAdd`；移进 `+` 后进入 `sPlus`，开始读右操作数。右操作数归约后进入 `sRightMul`，此时加法产生式的右部已完整，便可以构造加法节点。
 
-对这个子文法，`FOLLOW(E) = FOLLOW(T) = { +, $ }`。`s3` 表示移进并进入状态 3，`r2` 表示按产生式 (2) 归约，空格“—”表示语法错误。
+#### 由项目集填写 SLR(1) 表
 
-| 状态 | ACTION：`id` | ACTION：`+` | ACTION：`$` | GOTO：`E` | GOTO：`T` |
-| ---: | --- | --- | --- | ---: | ---: |
-| 0 | s3 | — | — | 1 | 2 |
-| 1 | — | s4 | accept | — | — |
-| 2 | — | r2 | r2 | — | — |
-| 3 | — | r3 | r3 | — | — |
-| 4 | s3 | — | — | — | 5 |
-| 5 | — | r1 | r1 | — | — |
+表项来自三类信息：
 
-表从三类信息得到：状态图中的终结符边填 `shift`；完整项目 `A -> β ·` 在 `FOLLOW(A)` 的列填 `reduce`；`S′ -> E ·` 在 `$` 列填 `accept`。非终结符边填入 GOTO 表。
+1. 终结符转移 `J --a--> K` 对应 `ACTION[J, a] = shift K`；
+2. 完整项目 `A -> β ·` 只在 `FOLLOW(A)` 的 Token 列填写 `reduce A -> β`；
+3. 增广开始项目 `CompUnit′ -> CompUnit ·` 在输入结束符 `$` 上填写 `accept`。
 
-#### 用这张表解析 a + b
+非终结符转移写入 GOTO 表。下面只列本例需要的 ACTION 表项，其他列仍需按完整文法构造。
 
-两个栈都从左到右表示“栈底 → 栈顶”。状态栈比符号栈多一个起始状态 0，表中不另列符号栈底的结束标记。
+| 状态 | 当前 Token | ACTION | 归约后的 GOTO |
+| --- | --- | --- | --- |
+| `s0` | `ID` | 移进 `sID` | — |
+| `sID` | `+` 或 `;` | 归约 (5) `PrimaryExpr -> ID` | 从弹栈后的状态进入 `sPrimary` |
+| `sPrimary` | `+` 或 `;` | 归约 (4) `UnaryExpr -> PrimaryExpr` | 进入 `sUnary` |
+| `sUnary` | `+` 或 `;` | 归约 (3) `MulExpr -> UnaryExpr` | 从 `s0` 进入 `sMul`；从 `sPlus` 进入 `sRightMul` |
+| `sMul` | `+` | 归约 (2) `AddExpr -> MulExpr` | 进入 `sAdd` |
+| `sAdd` | `+` | 移进 `sPlus` | — |
+| `sPlus` | `ID` | 移进 `sID` | — |
+| `sRightMul` | `;` | 归约 (1) `AddExpr -> AddExpr '+' MulExpr` | 回到 `sAdd` |
 
-| 步骤 | 状态栈 | 符号栈 | 剩余输入 | 本步动作与 AST |
+`+`、`;` 都属于 ToyC 中 `FOLLOW(PrimaryExpr)`、`FOLLOW(UnaryExpr)`、`FOLLOW(MulExpr)` 的成员，所以本例可在这些位置逐层归约。`AddExpr` 归约完成后还要经过 `RelExpr`、`LAndExpr`、`LOrExpr`、`Expr`，最后由外层语句处理分号。
+
+#### 跟着栈解析一次 a + b
+
+`Γ` 表示尚未展开列出的外层符号，`Σ` 表示对应的外层状态栈。以下仅列加法表达式对应的栈段。
+
+| 步骤 | 状态栈段 | 符号栈段 | 剩余输入 | 本步动作与 AST |
 | ---: | --- | --- | --- | --- |
-| 0 | `0` | 空 | `id + id $` | s3：移进 `a`，保留词素 |
-| 1 | `0 3` | `id` | `+ id $` | r3：`T -> id`，得到叶节点 `a`，GOTO[0, T] = 2 |
-| 2 | `0 2` | `T` | `+ id $` | r2：`E -> T`，传递节点 `a`，GOTO[0, E] = 1 |
-| 3 | `0 1` | `E` | `+ id $` | s4：移进 `+` |
-| 4 | `0 1 4` | `E +` | `id $` | s3：移进 `b` |
-| 5 | `0 1 4 3` | `E + id` | `$` | r3：得到叶节点 `b`，GOTO[4, T] = 5 |
-| 6 | `0 1 4 5` | `E + T` | `$` | r1：弹出三个符号，构造 `Binary('+', a, b)`，GOTO[0, E] = 1 |
-| 7 | `0 1` | `E` | `$` | accept：返回加法 AST |
+| 0 | `Σ s0` | `Γ` | `ID(a) + ID(b) ;` | 移进 `a` |
+| 1 | `Σ s0 sID` | `Γ ID` | `+ ID(b) ;` | 按 (5)、(4)、(3)、(2) 逐层归约，传递节点 `a` |
+| 2 | `Σ s0 sAdd` | `Γ AddExpr` | `+ ID(b) ;` | 移进 `+` |
+| 3 | `Σ s0 sAdd sPlus` | `Γ AddExpr '+'` | `ID(b) ;` | 移进 `b` |
+| 4 | `Σ s0 sAdd sPlus sID` | `Γ AddExpr '+' ID` | `;` | 按 (5)、(4)、(3) 逐层归约，传递节点 `b` |
+| 5 | `Σ s0 sAdd sPlus sRightMul` | `Γ AddExpr '+' MulExpr` | `;` | 按 (1) 弹出三个符号，构造 `Binary('+', a, b)` |
+| 6 | `Σ s0 sAdd` | `Γ AddExpr` | `;` | 继续归约为外层 `Expr`，再分析分号 |
 
-对照 LL(1)：LL(1) 从 `E` 展开到 `id + id`，LR 从 `id + id` 归约回 `E`。两者最终构造同一棵 AST。
+LL(1) 先展开 `AddExpr` 再匹配 Token；LR 先读取 Token 再归约成 `AddExpr`。两条路线最终得到同一棵加法 AST。
 
-#### LR(0) 和 SLR(1) 的区别，以及冲突怎么看
+#### LR(0)、SLR(1) 与表冲突
 
 | 方法 | 完整项目 `A -> β ·` 在哪些 Token 上归约 | 影响 |
 | --- | --- | --- |
-| LR(0) | 所有终结符列 | 不利用后继 Token 限制，较容易与其它动作冲突 |
-| SLR(1) | 仅 `FOLLOW(A)` 中的终结符列 | 用全局 FOLLOW 集排除一部分不该发生的归约 |
+| LR(0) | 所有终结符列 | 不利用后继 Token 限制，较容易与其他动作冲突 |
+| SLR(1) | 仅 `FOLLOW(A)` 中的终结符列 | 用 FOLLOW 集限制归约位置 |
 
-上面的小文法两种方法都能处理，但不能据此认为完整 ToyC 文法没有冲突。若 SLR 仍冲突，需要检查文法与消歧规则，或进一步采用 LR(1)/LALR(1) 等方法。
-
-**冲突出现在构造分析表时。** 同一格同时需要 `shift` 与 `reduce`，就是移进-归约冲突；同时需要两种 `reduce`，就是归约-归约冲突。运行时查到空格，则是输入的语法错误，不应再称为“表冲突”。
-
-例如不分优先级的文法 `E -> E + E | E * E | id`，读到 `a + b` 后再看到 `*`，会出现两种解释：
+ToyC 中，某个状态可能同时含有 `AddExpr -> MulExpr ·` 和等待乘除运算符的 `MulExpr` 项目。当前 Token 为 `*` 时，应继续读取乘法；`*` 不在 `FOLLOW(AddExpr)` 中，SLR(1) 因此不会在这一列归约 `AddExpr`。
 
 ```mermaid
-flowchart TB
-  A["已识别 a + b<br/>当前 Token：*"] -->|"先归约 E + E"| B["先组合加法<br/>(a + b) * c"]
-  A -->|"先移进 *"| C["继续读取乘法<br/>a + (b * c)"]
+flowchart LR
+  A["已读到 a + b<br/>当前 Token：*"] --> B["继续移进乘法分支"]
+  B --> C["先构造 b * c<br/>再归约 a + (b * c)"]
 ```
 
-ToyC 规定乘法优先级更高，应形成右侧那种 AST。可以通过分层文法表达优先级；使用分析器生成器时，也可按工具规则显式声明优先级与结合性。`else` 的归属同样需要明确处理，不能任意选择一条动作。
+同一表格单元同时需要移进与归约，称为移进-归约冲突；同时需要两种归约，称为归约-归约冲突。若完整 ToyC 的 SLR 表仍有冲突，应检查产生式展开和消歧规则，或采用 LR(1)/LALR(1)。`else` 按文法页的约定匹配最近的未匹配 `if`。
+
+运行时查到空表项表示输入的语法错误，与构造表时的冲突是两回事。
 
 <details>
 <summary>算法 4：CLOSURE / GOTO 与 LR(0) 项目集规范族</summary>
@@ -384,7 +402,7 @@ ToyC 规定乘法优先级更高，应形成右侧那种 AST。可以通过分�
 14:     moved = {A -> α X · β | A -> α · X β is in J};
 15:     return closure(moved);
 16:
-17: states = {closure({S′ -> · E})}; worklist = states;
+17: states = {closure({CompUnit′ -> · CompUnit})}; worklist = states;
 18: while worklist not empty do
 19:     J = pop(worklist);
 20:     for each grammar symbol X do
