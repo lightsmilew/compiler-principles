@@ -17,10 +17,9 @@
   background: var(--cc-bg-surface);
 }
 .phase { display: flex; flex-direction: column; padding: 0.9rem; }
-.phaseHeader { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; margin-bottom: 0.85rem; }
+.phaseHeader { margin-bottom: 0.85rem; }
 .eyebrow, .pipelineInput { display: block; font-size: 0.72rem; color: var(--cc-text-muted); }
 .board .phaseTitle { margin: 0.3rem 0 0; color: var(--cc-text-strong); font-size: 1.05rem; line-height: 1.4; }
-.phaseIcon { flex: none; width: 2rem; height: 2rem; color: var(--phase-color); }
 .board .stages { display: grid; gap: 0.5rem; list-style: none; margin: 0 0 0.85rem; padding: 0; }
 .board .stages li { margin: 0; min-width: 0; }
 .stage {

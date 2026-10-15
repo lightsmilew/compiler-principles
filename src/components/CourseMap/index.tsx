@@ -26,22 +26,6 @@ const phases = [
   },
 ];
 
-function PhaseIcon({index}: {index: number}): ReactNode {
-  return (
-    <svg className={styles.phaseIcon} viewBox="0 0 32 32" fill="none" aria-hidden="true">
-      <g stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        {index === 0 ? (
-          <path d="m10 8-7 8 7 8m12-16 7 8-7 8M19 5l-6 22" />
-        ) : index === 1 ? (
-          <path d="m16 3 13 7-13 7L3 10l13-7Zm-13 13 13 7 13-7M3 22l13 7 13-7" />
-        ) : (
-          <><path d="M4 24a13 13 0 1 1 24 0M16 16l7-7M8 16h1m14 0h1M16 4v1" /><circle cx="16" cy="16" r="2.5" /></>
-        )}
-      </g>
-    </svg>
-  );
-}
-
 export default function CourseMap(): ReactNode {
   return (
     <figure className={styles.board} aria-label="六部分实验的阶段路线">
@@ -49,8 +33,8 @@ export default function CourseMap(): ReactNode {
         {phases.map((phase, index) => (
           <section className={[styles.phase, styles[phase.color]].join(' ')} key={phase.title}>
             <header className={styles.phaseHeader}>
-              <div><span className={styles.eyebrow}>{phase.subtitle}</span><h4 className={styles.phaseTitle}>{phase.title}</h4></div>
-              <PhaseIcon index={index} />
+              <span className={styles.eyebrow}>{phase.subtitle}</span>
+              <h4 className={styles.phaseTitle}>{phase.title}</h4>
             </header>
             <ol className={styles.stages} start={index * 2 + 1}>
               {phase.stages.map(stage => (
@@ -72,7 +56,7 @@ export default function CourseMap(): ReactNode {
               ) : index === 1 ? (
                 <><strong>基线验证</strong><span>链接运行时库，用 QEMU 运行生成的程序。</span></>
               ) : (
-                <><strong>性能评测</strong><span>通过 <code>-opt</code> 启用优化。</span></>
+                <><strong>优化验证</strong><span>比较优化前后的运行结果与效率。</span></>
               )}
             </div>
           </section>

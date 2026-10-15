@@ -76,7 +76,7 @@ const stages: Stage[] = [
     description: '形成完整编译器，统一提交报告并完成汇报展示。',
     input: 'ToyC源文件',
     output: '可执行文件',
-    to: '/docs/labs/capstone',
+    to: '/docs/guide/report#最终交付物',
     type: 'capstone',
   },
 ];

@@ -63,7 +63,7 @@ export default function Home(): ReactNode {
         <section className={`${styles.container} ${styles.section}`} aria-labelledby="labs-title">
           <div className={styles.sectionHead}>
             <div><p className={styles.kicker}>实验安排</p><Heading as="h2" id="labs-title">六个实验部分</Heading><p className={styles.sectionDescription}>第一至四部分实现基线编译器，第五、六部分增加优化。</p></div>
-            <Link className={styles.textLink} to="/docs/labs/capstone">课程要求与目标 <Arrow /></Link>
+            <Link className={styles.textLink} to="/docs/labs/capstone">课程总览 <Arrow /></Link>
           </div>
           <div className={styles.labGrid}>
             {labs.map((lab, index) => (
@@ -75,7 +75,7 @@ export default function Home(): ReactNode {
               </Link>
             ))}
           </div>
-          <Link className={styles.capstone} to="/docs/labs/capstone"><CapstoneMark /><div><Heading as="h3">综合课程设计</Heading><p>整合各部分实现，完成平台评测、实验报告与汇报展示。</p></div><span className={styles.capstoneLink}>查看要求 <Arrow /></span></Link>
+          <Link className={styles.capstone} to="/docs/guide/report#最终交付物"><CapstoneMark /><div><Heading as="h3">综合课程设计</Heading><p>整合各部分实现，完成平台评测、实验报告与汇报展示。</p></div><span className={styles.capstoneLink}>查看要求 <Arrow /></span></Link>
         </section>
 
         <section className={styles.startSection} aria-labelledby="start-title">
