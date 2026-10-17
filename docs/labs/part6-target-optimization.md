@@ -316,3 +316,7 @@ toyc-cpp/           # 仓库目录名可自行设置，此处以 toyc-cpp 为例
 | [Spill / Reload](../optim/asm-spill) | 溢出代码模式、rematerialization、栈槽分配、spill 优化 | 不可避免的副产品 |
 | [窥孔优化](../optim/asm-peephole) | 局部模式匹配、规则迭代、典型规则 | 与寄存器分配配合 |
 | [强度削减](../optim/asm-strength-reduction) | 乘常量换移位与加法、派生归纳变量 | 只做可直接验证等价的局部替换；除常量换魔数属于[第五部分](../optim/ir-strength-reduction) |
+
+## 思考题
+
+待补充

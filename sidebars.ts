@@ -13,7 +13,7 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: '实验指南',
       collapsible: false,
-      items: ['guide/environment',
+      items: ['guide/environment', 'guide/generator-build',
         'guide/qemu-debugging', 'guide/workflow', 'guide/report', 'guide/grading', 'guide/submission'],
     },
     {
@@ -28,7 +28,6 @@ const sidebars: SidebarsConfig = {
         'labs/part4-codegen',
         'labs/part5-ir-optimization',
         'labs/part6-target-optimization',
-        'labs/part7-competition',
       ],
     },
     {
@@ -73,7 +72,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: '参考资料',
-      items: ['reference/grammar', 'reference/llvm-mlir', 'reference/toyc-runtime', 'reference/downloads', 'reference/faq'],
+      items: ['reference/grammar', 'reference/llvm-mlir', 'reference/toyc-runtime', 'reference/competition', 'reference/downloads', 'reference/faq'],
     },
   ],
 };

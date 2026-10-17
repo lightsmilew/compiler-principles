@@ -126,7 +126,7 @@ export function CompilerPipeline(): ReactNode {
         <div className={styles.executionSteps}>
           <div><strong><code>input.s</code> + <code>libtoyc.a</code></strong><span>RISC-V GCC 链接</span></div>
           <span className={styles.executionArrow} aria-hidden="true">→</span>
-          <div><strong>RISC-V 可执行文件</strong><span><code>input</code>（ELF）</span></div>
+          <div><strong>RISC-V 可执行文件</strong><span><code>input</code> · ELF</span></div>
           <span className={styles.executionArrow} aria-hidden="true">→</span>
           <div><strong>程序运行结果</strong><span><code>qemu-riscv64</code> 执行</span></div>
         </div>

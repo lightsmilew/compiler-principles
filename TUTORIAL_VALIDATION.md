@@ -1,5 +1,30 @@
 # 教程核查与实测记录
 
+## 2026-10-17：全新 WSL 环境实测
+
+新建 `ToyC-EnvCheck-20261017` 发行版，从 Ubuntu 24.04 官方基础镜像开始测试，系统版本为 24.04.5、架构为 x86_64。使用新建普通用户，按 `docs/guide/environment.md` 的命令安装，未使用原 WSL 用户的工具或依赖缓存。原有 `Ubuntu` 发行版保留。
+
+| 验证项目 | 实际结果 |
+| --- | --- |
+| 基础工具与 C++ | apt 安装成功，CMake 编译并运行 C++17 示例 |
+| Java | JDK 21 编译、运行成功，Maven 3.9.11 与 Gradle 8.5 均使用 Java 21 |
+| Gradle | 环境检查项目离线构建、运行成功 |
+| Rust | 官方源和 RsProxy 分别在两个新用户下安装 Rust / Cargo 1.85.0，均成功构建并运行示例 |
+| RISC-V 与 QEMU | 两套交叉工具链安装成功，独立汇编运行输出 `RV64GC OK` |
+| ToyC 运行时库 | 使用仓库提供的 `libtoyc.a` 链接，QEMU 运行输出 `ToyC runtime OK: 42` |
+| ANTLR 本地环境 | 4.13.1 生成器和 C++ 静态运行库安装成功，Java、C++ 示例均输出 `(start 7 + 5 <EOF>)` |
+| Flex / Bison 与 CMake | 使用生成器构建页的配置生成、编译、链接并运行最小文法程序 |
+| ANTLR 与 CMake | 将运行库安装到构建页指定的 `/usr/local`，按文档配置构建并运行成功 |
+| ANTLR 与 Gradle | 使用本机完整 JAR，离线执行 `clean build installDist`，通过 `compiler` 启动脚本运行成功 |
+| ANTLR 与 Maven | 新依赖缓存下执行 `mvn -B package`，生成、编译并通过 `compiler` 脚本运行成功 |
+| 新终端 | 新开 Bash 终端能找到 Maven、Gradle、ANTLR、Rust 和 Cargo |
+
+安装和构建命令未发现错误。修正了 Java 分支的联网说明，并将正式项目配置统一链接到生成器构建页。集成验证使用最小文法与入口程序，只验证构建配置。
+
+Windows 安装块通过 PowerShell 语法检查，并确认在线列表中存在 `Ubuntu-24.04`；没有重新安装 Windows 的 WSL 组件。ARM64 分支未执行。Gradle 官方包已实际下载、解压并使用，腾讯备用下载地址只检查了 HTTP 响应。日志和验证程序保存在 `.cache/wsl-env-check/`。
+
+## 2026-10-13：此前核查
+
 核查日期：2026-10-13（Asia/Shanghai）。覆盖 docs 下 36 篇教程、README、运行时说明，以及站点配置、CI、Dockerfile 和下载附件。本记录区分实际执行、工具语法检查、资料核对与尚未端到端执行的范围，不把代码片段或伪代码算作已运行程序。
 
 ## 当前结果

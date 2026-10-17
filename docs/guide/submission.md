@@ -17,21 +17,31 @@ description: Git 仓库可访问性、构建入口和希冀平台提交流程
 toyc-cpp/                        # 仓库目录名可自行设置，此处以 toyc-cpp 为例
 ├── CMakeLists.txt 或 Makefile / pom.xml / build.gradle / Cargo.toml
 ├── src/                         # 编译器源代码
+├── grammar/                     # 使用生成器时提交 .l / .y / .g4 文法
 └── README.md                    # 简要说明编译器架构
 ```
 
-评测系统会克隆指定仓库和分支，在 Linux 环境中自动构建、运行并比较输出。每个实验只需提交源代码（`src/` 或对应语言源码）；`tests/`、`实验报告` 和 `libtoyc.a` 不要求提交到仓库，libtoyc.a 由评测平台统一提供。评测程序不能依赖 IDE、Windows 路径、绝对路径或本机缓存。
+评测系统会克隆指定仓库和分支，在 Linux 中构建并运行。仓库须包含源码和构建配置；测试文件、实验报告和 `libtoyc.a` 无需上传。程序不能依赖 IDE、Windows 路径或本机缓存。
 
-源码、构建脚本与设计说明按阶段维护。不要提交构建产物（如 `a.out`、`*.o`、`*.class`）、IDE 配置、运行时库或本地缓存。最终报告与汇报材料的要求见[最终交付物](./report#最终交付物)。
+源码、构建脚本与设计说明按阶段维护。`a.out`、`*.o`、`*.class` 等构建产物、IDE 配置和本地缓存无需提交。报告与汇报材料见[最终交付物](./report#最终交付物)。
+
+使用 Flex / Bison 或 ANTLR 时，提交文法文件，并在构建配置中加入生成步骤。README 写明构建和运行命令，配置示例见[生成器项目构建](./generator-build)。
 
 ## 二、编译器命令行约定
 
-评测时，编译器从标准输入读取 ToyC 源代码，把 RV64GC 汇编写到标准输出。全部参数及各阶段输出规范见[统一驱动接口](./workflow#统一驱动接口)。
+评测时，编译器从标准输入读取 ToyC 源代码，按参数将检查结果或 RV64GC 汇编写到标准输出。全部参数及各阶段输出规范见[统一驱动接口](./workflow#统一驱动接口)。
+
+语法分析与选做语义分析一起提交评测，共用以下调用。语法通过后执行已实现的语义检查，输出 `accept` 或 `reject` 及错误行号，具体格式见[语法规范](../labs/part2-parser#六输入输出规范与统一样例)和[语义规范](../labs/optional-semantic#五输入输出规范与统一样例)。
+
+```bash
+# 执行位置：WSL / Ubuntu 开发主机终端，编译器项目根目录
+./compiler -ast < input.c > input.check-ast
+```
 
 最常用的两种调用：
 
 ```bash
-# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
+# 执行位置：WSL / Ubuntu 开发主机终端，编译器项目根目录
 ./compiler -asm < input.c > input.s          # 功能样例：不带 -opt
 ./compiler -asm -opt < input.c > input.opt.s # 性能样例：启用优化
 ```
@@ -42,14 +52,14 @@ toyc-cpp/                        # 仓库目录名可自行设置，此处以 to
 
 | 阶段 | 编译器输入 | 程序运行时输入 | 链接产物 | 程序输出 |
 |---|---|---|---|---|
-| 第一部分（词法） | `*.c` | — | — | `*.token` |
-| 第二部分（语法） | `*.c` | — | — | `*.check-ast` |
-| 第三部分（IR） | `*.c` | — | — | `*.ll` / `*.opt.ll` |
-| 第四部分（汇编） | `*.c` | `*.in` | `input`（无后缀 ELF） | `*.out` |
+| 第一部分：词法 | `*.c` | — | — | `*.token` |
+| 第二部分：语法与选做语义 | `*.c` | — | — | `*.check-ast` |
+| 第三部分：IR | `*.c` | — | — | `*.ll` / `*.opt.ll` |
+| 第四部分：汇编 | `*.c` | `*.in` | `input`，无后缀 ELF | `*.out` |
 
-**完整流程**：`./compiler` 读取 `*.c` → 输出汇编 `*.s` → `riscv64-unknown-elf-gcc` 链接 `*.s` 与 `libtoyc.a` → 生成可执行文件（无后缀，如 `input`）→ 运行可执行文件，把 stdout 重定向到 `*.out`，本地对拍时比较此文件，同时检查程序退出代码。
+**完整流程**：`./compiler` 读取 `*.c` → 输出汇编 `*.s` → `riscv64-unknown-elf-gcc` 链接 `*.s` 与 `libtoyc.a` → 生成无后缀可执行文件 `input` → 运行程序，将 stdout 保存为 `*.out`。本地测试时比较输出并检查退出码。
 
-`*.c` 是 ToyC 源文件，`*.in` 是 ToyC 程序运行时的标准输入数据（例如 `getint()` 读取的内容），`*.out` 是 ToyC 程序的标准输出结果（例如 `putint()` 写入的内容）。三者不要混淆。
+`*.c` 是 ToyC 源文件，`*.in` 是程序运行时的输入数据，`*.out` 是程序的输出结果。
 
 汇编、链接和运行的分步命令见[第四部分：输出形式](../labs/part4-codegen#输出形式)；完整虚拟机的启动、登录和调试见[QEMU 调试指南](./qemu-debugging#三完整虚拟机先确认磁盘格式)。
 
@@ -69,7 +79,7 @@ toyc-cpp/                        # 仓库目录名可自行设置，此处以 to
 链接时显式加入该文件：
 
 ```bash
-# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
+# 执行位置：WSL / Ubuntu 开发主机终端，编译器项目根目录
 # qemu-riscv64 命令也在此终端输入，由 QEMU 执行 RISC-V 程序
 riscv64-unknown-elf-gcc -march=rv64gc -mabi=lp64d \
    -nostdlib -static input.s third_party/toyc/libtoyc.a -o input
@@ -84,7 +94,7 @@ qemu-riscv64 ./input < input.in > result.out
 
 - **仓库地址**：GitHub、Gitee 或 GitLab 的 HTTPS Git clone URL，例如 `https://github.com/myuser/myproj.git`；
 - **访问令牌**：用于授权评测平台拉取仓库代码，需要具备该仓库的读取权限；
-- **分支名（可选）**：例如 `main` 或 `mybranchname`，填写时必须与远程仓库中的分支名称一致。
+- **分支名**：选填，例如 `main` 或 `mybranchname`，须与远程分支名称一致。
 
 希冀提交内容应包含访问令牌，按以下格式将用户名和令牌加入 HTTPS 仓库地址；如需指定分支，在地址后加一个空格和分支名：
 
@@ -104,12 +114,12 @@ https://myuser:ghp_xxxxxx@github.com/myuser/myproj.git
 - [Gitee 访问令牌获取方法](https://blog.csdn.net/weixin_42098295/article/details/134982972)
 - [GitLab 访问令牌获取方法](https://docs.gitlab.com/user/profile/personal_access_tokens/)
 
-仓库地址必须是评测服务器可以访问的 clone URL，不要提交本机路径（如 `D:\work\...`、`/home/user/...`）或仓库的网页地址。带令牌的 URL 仅填写在希冀提交入口，不要写入 README、脚本、提交信息或公开文档；令牌权限以拉取代码所需的最小权限为限。
+仓库地址使用评测服务器可访问的 clone URL。带令牌的 URL 仅填写在希冀提交入口，不要写入 README、脚本或公开文档；令牌只需仓库读取权限。
 
 ## 七、提交前检查
 
 ```bash
-# 执行位置：WSL / Ubuntu 开发主机终端（编译器项目根目录）
+# 执行位置：WSL / Ubuntu 开发主机终端，编译器项目根目录
 # qemu-riscv64 命令也在此终端输入，由 QEMU 执行 RISC-V 程序
 # 检查当前分支和远端
 git branch --show-current

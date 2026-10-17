@@ -1,11 +1,11 @@
 ---
 sidebar_position: 10
-sidebar_label: 第七部分 · 编译系统赛
-title: 第七部分 · 编译系统赛
+sidebar_label: 编译系统赛
+title: 编译系统赛
 description: 全国大学生计算机系统能力大赛编译实现赛介绍、赛制说明与备赛建议
 ---
 
-# 第七部分 · 编译系统赛
+# 编译系统赛
 
 :::info[比赛与课程的关联]
 

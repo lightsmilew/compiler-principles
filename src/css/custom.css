@@ -206,17 +206,17 @@
   --cc-text-muted: #94a3b8;
   --cc-text-faint: #64748b;
 
-  --cc-accent: var(--cc-green-400);
-  --cc-accent-hover: var(--cc-green-300);
+  --cc-accent: var(--cc-green-200);
+  --cc-accent-hover: var(--cc-green-100);
   --cc-accent-soft: rgb(17 87 64 / 0.32);
-  --cc-accent-soft-fg: #8eb1cf;  /* 暗色下的绿底文字保持偏亮绿 */
-  --cc-accent-on: #ffffff;
+  --cc-accent-soft-fg: var(--cc-green-200);
+  --cc-accent-on: var(--cc-green-900);
 
   --cc-success: #3f7e64;
   --cc-warning: #f59e0b;
   --cc-danger: #b54a4a;
 
-  --ifm-color-primary: var(--cc-green-400);
+  --ifm-color-primary: var(--cc-green-200);
   --ifm-color-primary-dark: var(--cc-green-500);
   --ifm-color-primary-darker: var(--cc-green-600);
   --ifm-color-primary-darkest: var(--cc-green-700);
@@ -227,8 +227,8 @@
   --ifm-color-content: var(--cc-text);
   --ifm-color-content-secondary: var(--cc-text-muted);
   --ifm-heading-color: var(--cc-text-strong);
-  --ifm-link-color: var(--cc-green-300);
-  --ifm-link-hover-color: var(--cc-green-200);
+  --ifm-link-color: var(--cc-green-200);
+  --ifm-link-hover-color: var(--cc-green-100);
 
   --ifm-background-color: var(--cc-bg-page);
   --ifm-background-surface-color: var(--cc-bg-surface);
@@ -251,7 +251,7 @@
   --ifm-navbar-link-hover-color: var(--cc-green-300);
 
   --ifm-menu-color: var(--cc-text);
-  --ifm-menu-color-active: #3f7e64;
+  --ifm-menu-color-active: var(--cc-green-200);
   --ifm-menu-color-background-active: rgb(17 87 64 / 0.22);
   --ifm-menu-color-background-hover: rgb(148 163 184 / 0.12);
 
@@ -512,6 +512,7 @@ div[class^='codeBlockContainer'] {
   border-radius: var(--cc-radius-xl);
   box-shadow: var(--cc-shadow-sm);
   color: var(--cc-text);
+  --ifm-alert-foreground-color: var(--cc-text);
 }
 
 .alert--info {
@@ -541,21 +542,43 @@ div[class^='codeBlockContainer'] {
 [data-theme='dark'] .alert--info {
   --ifm-alert-background-color: rgb(0 37 84 / 0.28);
   --ifm-alert-border-color: rgb(47 108 156 / 0.45);
+  --ifm-alert-background-color-highlight: rgb(47 108 156 / 0.2);
 }
 
 [data-theme='dark'] .alert--success {
   --ifm-alert-background-color: rgb(17 87 64 / 0.22);
   --ifm-alert-border-color: rgb(63 126 100 / 0.4);
+  --ifm-alert-background-color-highlight: rgb(63 126 100 / 0.2);
 }
 
 [data-theme='dark'] .alert--warning {
   --ifm-alert-background-color: rgb(245 158 11 / 0.12);
   --ifm-alert-border-color: rgb(245 158 11 / 0.35);
+  --ifm-alert-background-color-highlight: rgb(245 158 11 / 0.18);
 }
 
 [data-theme='dark'] .alert--danger {
   --ifm-alert-background-color: rgb(181 74 74 / 0.18);
   --ifm-alert-border-color: rgb(181 74 74 / 0.4);
+  --ifm-alert-background-color-highlight: rgb(181 74 74 / 0.2);
+}
+
+/* Infima gives alert links a separate foreground color. Keep links and inline
+   code readable against each theme's alert background, including hover states. */
+.markdown .alert a:not(.button),
+.markdown .alert a:not(.button):hover {
+  color: var(--cc-accent);
+}
+
+.alert :not(pre) > code {
+  color: var(--ifm-code-color);
+  background-color: var(--ifm-code-background);
+}
+
+.theme-doc-markdown details {
+  color: var(--cc-text);
+  background-color: var(--cc-bg-subtle);
+  border-color: var(--cc-border);
 }
 
 /* --------------------------------------------------------------------------

@@ -8,14 +8,12 @@ description: 从 Ubuntu 或 WSL 开始，按顺序通过命令行安装工具链
 # 开发环境与工具链
 
 :::info[示例目录]
-本页使用 **Linux 用户主目录下的 `ToyC/`** 作为示例项目目录，即 `/home/用户名/ToyC/`。同学们可以使用其他项目名称，执行命令时替换其中的 `ToyC` 即可。
+本页以 `~/ToyC` 为项目目录，`~` 和 `$HOME` 指 Linux 用户主目录。使用其他目录时，请替换命令中的路径。
 
-命令中的 `"$HOME/ToyC"` 表示示例项目根目录；`$HOME` 和 `~` 都指当前 **Linux 用户**的主目录。Windows 用户名与 Linux 用户名可能不同。WSL 安装命令在 Windows PowerShell 中执行，Linux 路径在进入 Ubuntu 后使用。
-
-Maven、Gradle 和 ANTLR 安装在 `~/.local/`，安装包与环境验证程序放在 `~/.cache/`。安装、验证命令使用完整路径，可以从任意 Ubuntu 工作目录执行；执行 Git 和项目构建命令前，进入实际项目根目录，本页示例为 `cd "$HOME/ToyC"`。
+Maven、Gradle 和 ANTLR 安装在 `~/.local/`，安装包与验证程序放在 `~/.cache/`。项目构建命令在 `~/ToyC` 中执行。
 :::
 
-本页以 **Ubuntu 24.04 LTS（x86-64 或 ARM64 开发主机）** 为基础。Windows 用户先安装 WSL2，再在 Ubuntu 终端中完成后续步骤；已有 Ubuntu 24.04 的用户直接从第二步开始。命令块会注明执行位置，遇到报错时先解决该步骤，再继续安装。
+本页使用 **Ubuntu 24.04 LTS**，支持 x86-64 和 ARM64。Windows 用户先安装 WSL2；已有 Ubuntu 24.04 的用户从第二步开始。
 
 :::info[如何区分命令执行位置]
 全文的命令块都使用 `# 执行位置：...` 注释标明输入命令的终端，复制命令时可以保留注释。
@@ -37,11 +35,11 @@ Maven、Gradle 和 ANTLR 安装在 `~/.local/`，安装包与环境验证程序�
 | 2 | 安装基础工具、准备目录和命令搜索路径 | Ubuntu 终端 |
 | 3 | 安装并验证所选语言的工具链 | Ubuntu 终端 |
 | 4 | 安装 RISC-V 交叉工具链与 QEMU，运行独立汇编示例 | Ubuntu 终端 |
-| 5 | 安装并验证词法 / 语法生成器（选用） | Ubuntu 终端 |
+| 5 | 按需安装词法 / 语法生成器 | Ubuntu 终端 |
 | 6 | 获取课程附件，验证 ToyC 运行时库 | 浏览器下载附件，Ubuntu 终端验证 |
 | 7 | 开始编译器项目 | Ubuntu 终端 |
 
-## 一、安装 WSL2 与 Ubuntu（Windows 用户）
+## 一、安装 WSL2 与 Ubuntu
 
 在**管理员 PowerShell** 中执行：
 
@@ -126,11 +124,13 @@ git config --global user.email "你的邮箱"
 
 ## 三、安装并验证所选语言的工具链
 
-| 实现语言 | 本页使用的工具 |
-| --- | --- |
-| C / C++ | Ubuntu 24.04 提供的 GCC、G++、CMake、Make |
-| Java | JDK 21、Maven 3.9.11、Gradle 8.5 |
-| Rust | Rust / Cargo 1.85.0 |
+| 实现语言 | 开发工具 | 可用的前端生成器 |
+| --- | --- | --- |
+| C / C++ | GCC、G++、CMake、Make | Flex / Bison；C++ 也可使用 ANTLR 4.13.1 |
+| Java | JDK 21、Maven 3.9.11、Gradle 8.5 | ANTLR 4.13.1 |
+| Rust | Rust / Cargo 1.85.0 | 可手写前端，或在项目中声明所用生成器依赖 |
+
+评测机已安装 Flex、Bison 和 ANTLR 4.13.1。使用这些工具时，提交文法文件并在构建配置中加入生成步骤。CMake、Gradle 和 Maven 的写法见[生成器项目构建](./generator-build)。
 
 以下程序用于验证开发工具，运行结果应与各小节给出的输出一致。这些验证程序无需提交。
 
@@ -264,7 +264,7 @@ gradle --no-daemon --console=plain --offline \
   -p "$HOME/.cache/toyc-env/gradle" clean build run
 ```
 
-输出中应包含 `Gradle environment OK (Java 21)` 和 `BUILD SUCCESSFUL`；构建产物位于 `~/.cache/toyc-env/gradle/build/`。此检查使用 Gradle 内置插件，无外部依赖，因此可以离线执行；正式项目引入 ANTLR 等依赖时，首次构建需要联网。
+输出中应包含 `Gradle environment OK (Java 21)` 和 `BUILD SUCCESSFUL`；构建产物位于 `~/.cache/toyc-env/gradle/build/`。此检查无外部依赖，可以离线执行。正式项目也可直接使用本机的 ANTLR JAR；从 Maven 仓库下载依赖时需要联网。
 
 Maven 安装方式和 Gradle 对 Java 21 的支持分别见 [Maven 官方说明](https://maven.apache.org/install.html)和 [Gradle 8.5 发布说明](https://docs.gradle.org/8.5/release-notes.html)。
 
@@ -383,9 +383,9 @@ qemu-riscv64 "$HOME/.cache/toyc-env/riscv/check"
 
 本页采用 qemu-user 运行单个静态 ELF，Ubuntu / WSL 提供编译器的开发环境。启动完整 Linux 虚拟机的 qemu-system 模式属于扩展学习，可参阅第六步的 QEMU 调试资料。
 
-## 五、安装词法 / 语法生成器（选用）
+## 五、安装词法 / 语法生成器
 
-手写词法分析器和语法分析器可以跳过本节。使用生成器时，实验报告需说明词法规则、语法分析方法和完整文法文件；仅提交生成物而未说明原理的，最高按 80% 计分。
+手写前端可跳过本节。以下是本地安装步骤；使用生成器时，报告需说明词法规则、分析方法和文法。
 
 生成器用于实验一、实验二。IR 生成、优化和目标代码生成仍需自行实现。
 
@@ -499,7 +499,7 @@ printf '7+5\n' | java \
   org.antlr.v4.gui.TestRig EnvCheck start -tree
 ```
 
-应输出 `(start 7 + 5 <EOF>)`。正式 Maven / Gradle 项目分别使用 `antlr4-maven-plugin` 或 Gradle 的内置 `antlr` 插件管理生成步骤，依赖版本统一设为 `4.13.1`。Gradle 内置插件的写法是 `id 'antlr'`，生成器依赖使用 `org.antlr:antlr4:4.13.1`，Java 运行库使用 `org.antlr:antlr4-runtime:4.13.1`。
+应输出 `(start 7 + 5 <EOF>)`。正式项目的 Gradle 和 Maven 配置见[生成器项目构建](./generator-build#antlr-java-build-tools)，生成器和运行库版本均使用 `4.13.1`。
 
 ## 六、获取课程附件并验证运行时库
 
@@ -509,7 +509,7 @@ printf '7+5\n' | java \
 | --- | --- | --- |
 | ToyC 词法与文法约定 | [查看文法](../reference/grammar) | 实现词法 / 语法分析时的语言依据 |
 | ToyC RV64GC 运行时库 | [下载 libtoyc.a](pathname:///downloads/libtoyc.a) | 链接同学们实现的编译器生成的汇编 |
-| 课程设计报告书写规范 | [下载报告规范](pathname:///word/武汉大学计算机学院课程设计报告书写规范.doc) | 完成实验后的统一报告 |
+| 实验报告模板 | [下载实验报告模板](pathname:///word/武汉大学计算机学院课程设计报告书写规范.doc) | 按模板撰写统一报告 |
 | QEMU 本地调试指南 | [下载调试指南](pathname:///pdf/QEMU本地调试指南.pdf) | 单步调试 RISC-V 产物 |
 | SysY2022 语言定义 | [下载语言定义](pathname:///pdf/SysY2022语言定义-V1.pdf) | 竞赛参考 |
 | SysY2022 运行时库说明 | [下载运行时库说明](pathname:///pdf/SysY2022运行时库-V1.pdf) | 竞赛参考 |
@@ -529,7 +529,7 @@ mkdir -p "$HOME/ToyC/third_party/toyc"   "$HOME/ToyC/third_party/docs"
 下载 `libtoyc.a` 后，将它放到 `~/ToyC/third_party/toyc/libtoyc.a`。Windows 浏览器通常把文件保存到 Windows 下载目录，可在 Ubuntu 中复制；下面的 Windows 用户名应替换为自己的实际用户名：
 
 ```bash
-# 执行位置：WSL Ubuntu 终端（访问 Windows 下载目录）
+# 执行位置：WSL Ubuntu 终端，访问 Windows 下载目录
 cp "/mnt/c/Users/你的Windows用户名/Downloads/libtoyc.a" \
   "$HOME/ToyC/third_party/toyc/libtoyc.a"
 ```
@@ -606,17 +606,3 @@ ToyC/
 构建配置文件放在项目根目录。如果已有课程项目仓库，在原仓库中继续开发，并按实际路径替换本页的示例路径。后续命令中的相对路径以项目根目录为起点，编译器接口要求见[统一驱动接口](./workflow#统一驱动接口)。
 
 从[第一部分：词法分析](../labs/part1-lexer)开始实现。实现相应阶段后，再按照[统一驱动接口](./workflow#统一驱动接口)和[开发与测试流程](workflow)验证 `-token`、`-ast`、`-asm` 等接口。
-
-## 常见搭建问题
-
-| 现象 | 检查与处理 |
-| --- | --- |
-| `curl: command not found` / `unzip: command not found` | 先完成第二步的基础工具安装，再执行下载与解压命令 |
-| `sudo` 要求密码 | 输入首次启动 Ubuntu 时创建的 Linux 账号密码 |
-| 软件包找不到 | 确认 Ubuntu 版本为 24.04，并先执行 `sudo apt update` |
-| `mvn` / `gradle` / `antlr4` 找不到 | 检查 `~/.local/bin` 是否已加入 `PATH`，确认对应安装步骤已成功 |
-| Java 版本不是 21 | 使用第三步的 `update-alternatives` 选择 Java 21；若自行设置过 `JAVA_HOME`，也需指向该 JDK |
-| ANTLR C++ 找不到头文件或运行库 | 完成 5.3 的运行库构建与安装，并在项目中同时配置 include 路径和链接库 |
-| 解压提示文件不存在或格式错误 | 检查前一条下载命令是否成功；修复下载错误后重新下载，再解压 |
-| `Exec format error` | RISC-V ELF 在开发主机上用 `qemu-riscv64` 执行 |
-| 链接提示找不到 `libtoyc.a` | 完成 6.1，核对库文件名和链接命令中的完整路径 |

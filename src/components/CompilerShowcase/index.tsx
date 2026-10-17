@@ -16,7 +16,7 @@ const stages: {id: StageId; label: string; title: string; note: string; code?: s
   },
   {
     id: 'ast', label: 'AST', title: '返回表达式 · AST 结构',
-    note: '树中保留 return 与加法的结构。评测的 -ast 接口输出语法检查结果 accept / reject。',
+    note: '树中保留 return 与加法的结构。评测的 -ast 接口执行语法与选做语义检查，输出 accept / reject。',
   },
   {
     id: 'ir', label: 'IR', title: '中间表示 · LLVM 风格示意',
