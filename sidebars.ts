@@ -32,10 +32,10 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
-      label: '机器无关代码优化',
+      label: '中间代码优化',
       link: {
         type: 'generated-index',
-        title: '机器无关代码优化',
+        title: '中间代码优化',
         description:
           'LLVM IR 层的机器无关优化：基本块与 CFG、mem2reg、常量传播、CSE、死代码消除、控制流简化、循环不变代码外提、强度削减、函数内联、基本块重排。',
       },
