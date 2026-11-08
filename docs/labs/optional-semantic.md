@@ -237,7 +237,7 @@ Binary("<", lhs, rhs)-> type = int,  is_boolean = true
 accept
 ```
 
-存在语义错误时，首行输出 `reject`，随后按源代码行号从小到大输出错误位置，退出码为非零值：
+存在语义错误时，首行输出 `reject`，随后按源代码行号从小到大输出错误位置，退出码为 `0`：
 
 ```text
 reject
