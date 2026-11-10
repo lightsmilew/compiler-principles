@@ -110,7 +110,7 @@ static final int MAX_LEN = 64;  // 常量 UPPER_SNAKE_CASE
 
 | 参数 | 作用 | 详细规范 |
 | --- | --- | --- |
-| `-token` | 输出 Token 流 | [第一部分：输入输出规范](../labs/part1-lexer#五输入输出规范与统一样例) |
+| `-token` | 输出 Token 流；含非法字符时先输出 `reject` 诊断块 | [第一部分：输入输出规范](../labs/part1-lexer#五输入输出规范与统一样例) |
 | `-ast` | 检查语法及已实现的选做语义分析，输出 `accept` / `reject` 及错误行号 | [语法规范](../labs/part2-parser#六输入输出规范与统一样例)、[语义规范](../labs/optional-semantic#五输入输出规范与统一样例) |
 | `-asm` | 输出 RV64GC 汇编 | [第四部分：输入输出规范](../labs/part4-codegen#六输入输出规范与统一样例) |
 | `-opt` | 与 `-asm` 组合，启用已实现的优化 | [中间代码优化](../labs/part5-ir-optimization)、[目标代码优化](../labs/part6-target-optimization) |
